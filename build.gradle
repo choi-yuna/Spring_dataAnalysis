@@ -30,10 +30,12 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
-	implementation 'org.apache.poi:poi:5.2.3'
-	implementation 'org.apache.poi:poi-ooxml-schemas:5.2.3'
+	implementation 'org.apache.poi:poi:5.0.0'
+	implementation 'org.apache.poi:poi-ooxml:5.0.0'
 	implementation 'org.apache.xmlbeans:xmlbeans:5.1.1'
 	implementation 'org.apache.commons:commons-collections4:4.4'
+
+
 }
 
 tasks.named('test') {
