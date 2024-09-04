@@ -41,7 +41,6 @@ public class ExcelUploadController {
     @PostMapping("/analyze")
     public ResponseEntity<?> analyzeData(@RequestBody AnalysisRequestDTO request) {
         try {
-
             String fileId = request.getFileId();
             String diseaseClass = request.getDiseaseClass();
             int institutionId = request.getInstitutionId();
