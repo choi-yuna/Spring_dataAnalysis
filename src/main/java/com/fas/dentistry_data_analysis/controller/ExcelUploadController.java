@@ -1,7 +1,10 @@
+
+
 package com.fas.dentistry_data_analysis.controller;
 
 import com.fas.dentistry_data_analysis.DTO.AnalysisRequestDTO;
 import com.fas.dentistry_data_analysis.service.ExcelUploadService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -11,6 +14,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api")
 public class ExcelUploadController {
@@ -44,6 +48,8 @@ public class ExcelUploadController {
             String fileId = request.getFileId();
             String diseaseClass = request.getDiseaseClass();
             int institutionId = request.getInstitutionId();
+
+            log.info("{} {} {}", fileId,diseaseClass,institutionId);
             // 파일 ID와 필터 조건(DISEASE_CLASS, INSTITUTION_ID)을 기반으로 데이터 분석 수행
             List<Map<String, String>> dataList = excelUploadService.analyzeData(fileId, diseaseClass, institutionId);
 
