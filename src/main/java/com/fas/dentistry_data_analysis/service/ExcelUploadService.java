@@ -23,10 +23,7 @@ public class ExcelUploadService {
 
     // 파일을 서버에 저장하고 고유한 파일 ID를 반환하는 메소드
     public String storeFile(MultipartFile file) throws IOException {
-        // 고유한 파일 ID 생성 (UUID 사용)
         String fileId = UUID.randomUUID().toString();
-
-        // 파일 저장할 경로 설정 (예: tmpdir 사용, 필요에 따라 변경 가능)
         String tempDir = System.getProperty("java.io.tmpdir");
         Path filePath = Paths.get(tempDir, fileId + "_" + file.getOriginalFilename());
 
@@ -36,109 +33,111 @@ public class ExcelUploadService {
         // 파일 ID와 경로를 저장
         fileStorage.put(fileId, filePath);
 
-        // 고유한 파일 ID를 반환
-        return fileId;
+        return fileId; // 고유한 파일 ID 반환
     }
 
     // 파일 ID를 기반으로 데이터 분석을 수행하는 메소드
     public List<Map<String, String>> analyzeData(String fileId, String diseaseClass, int institutionId) throws IOException {
-        // 파일 ID로 저장된 파일 경로를 찾음
         Path filePath = fileStorage.get(fileId);
-
         if (filePath == null) {
-            throw new IOException("파일을 찾을 수 없습니다: " + fileId);
+            throw new IOException("파일을 찾을 수 없습니다. 파일 ID: " + fileId);
         }
 
-        // 파일 경로를 기반으로 데이터를 분석하는 로직 구현
-        return processZipFile(new File(filePath.toString()), diseaseClass, institutionId);
+        // 파일의 확장자를 확인하여 ZIP 또는 엑셀 파일로 처리
+        return processFile(new File(filePath.toString()), diseaseClass, institutionId);
     }
 
-    // ZIP 파일 처리 및 필터링 메소드 (파일 경로 기반)
+    // 파일 확장자를 기반으로 ZIP 또는 엑셀 파일 처리
+    public List<Map<String, String>> processFile(File file, String diseaseClass, int institutionId) throws IOException {
+        String fileName = file.getName().toLowerCase();
+
+        if (fileName.endsWith(".zip")) {
+            return processZipFile(file, diseaseClass, institutionId);
+        } else if (fileName.endsWith(".xlsx")) {
+            return processExcelFile(file, diseaseClass, institutionId);
+        } else {
+            throw new IllegalArgumentException("지원하지 않는 파일 형식입니다: " + fileName);
+        }
+    }
+
+    // ZIP 파일 처리 및 필터링 메소드
     public List<Map<String, String>> processZipFile(File file, String diseaseClass, int institutionId) throws IOException {
         List<Map<String, String>> dataList = new ArrayList<>();
-
-        // ZIP 파일 풀기
         File extractedDir = unzip(file.getPath(), file.getParent());
-
-        // 압축 해제된 디렉토리에서 엑셀 파일 읽기
         File[] excelFiles = extractedDir.listFiles((dir, name) -> name.endsWith(".xlsx"));
 
         if (excelFiles != null) {
             for (File excelFile : excelFiles) {
-                try (InputStream inputStream = new FileInputStream(excelFile);
-                     Workbook workbook = new XSSFWorkbook(inputStream)) {
+                dataList.addAll(processExcelFile(excelFile, diseaseClass, institutionId));
+            }
+        }
+        return dataList;
+    }
 
-                    int numberOfSheets = workbook.getNumberOfSheets();
+    // 엑셀 파일 처리 및 필터링 메소드
+    public List<Map<String, String>> processExcelFile(File excelFile, String diseaseClass, int institutionId) throws IOException {
+        List<Map<String, String>> dataList = new ArrayList<>();
 
-                    for (int i = 0; i < numberOfSheets; i++) {
-                        Sheet sheet = workbook.getSheetAt(i);
-                        String sheetName = sheet.getSheetName().trim(); // 시트 이름의 앞뒤 공백 제거
+        try (InputStream inputStream = new FileInputStream(excelFile);
+             Workbook workbook = new XSSFWorkbook(inputStream)) {
 
-                        // 해당 시트에 대한 헤더 목록을 가져옴
-                        List<String> expectedHeaders = SheetHeaderMapping.getHeadersForSheet(sheetName);
+            int numberOfSheets = workbook.getNumberOfSheets();
 
-                        if (expectedHeaders != null) {  // 매핑된 헤더가 있는 경우에만 처리
+            for (int i = 0; i < numberOfSheets; i++) {
+                Sheet sheet = workbook.getSheetAt(i);
+                String sheetName = sheet.getSheetName().trim();
+                List<String> expectedHeaders = SheetHeaderMapping.getHeadersForSheet(sheetName);
 
-                            // 4번째 행을 헤더로 설정
-                            Row headerRow = sheet.getRow(3); // 4번째 행은 3번째 인덱스
-                            if (headerRow == null) {
-                                throw new RuntimeException("헤더 행이 존재하지 않습니다. 파일을 확인해주세요.");
+                if (expectedHeaders != null) {  // 매핑된 헤더가 있는 경우에만 처리
+                    Row headerRow = sheet.getRow(3); // 4번째 행을 헤더로 설정
+                    if (headerRow == null) {
+                        throw new RuntimeException("헤더 행이 존재하지 않습니다. 파일을 확인해주세요.");
+                    }
+
+                    // 엑셀 파일의 헤더를 읽어옴
+                    Map<String, Integer> headerIndexMap = new HashMap<>();
+                    for (int cellIndex = 0; cellIndex < headerRow.getLastCellNum(); cellIndex++) {
+                        Cell cell = headerRow.getCell(cellIndex);
+                        if (cell != null) {
+                            String headerName = cell.getStringCellValue().trim();
+                            if (expectedHeaders.contains(headerName)) {
+                                headerIndexMap.put(headerName, cellIndex);
                             }
+                        }
+                    }
 
-                            // 실제 엑셀 파일의 헤더를 읽어옴
-                            Map<String, Integer> headerIndexMap = new HashMap<>();
-                            for (int cellIndex = 0; cellIndex < headerRow.getLastCellNum(); cellIndex++) {
-                                Cell cell = headerRow.getCell(cellIndex);
-                                if (cell != null) {
-                                    String headerName = cell.getStringCellValue().trim();
-                                    if (expectedHeaders.contains(headerName)) {
-                                        headerIndexMap.put(headerName, cellIndex);
+                    Integer diseaseClassIndex = headerIndexMap.get("DISEASE_CLASS");
+                    Integer institutionIdIndex = headerIndexMap.get("INSTITUTION_ID");
+                    int institutionIdValue;
+
+                    if (diseaseClassIndex != null && institutionIdIndex != null) {
+                        for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) {  // 9번째 행부터 데이터 읽기
+                            Row row = sheet.getRow(rowIndex);
+                            if (row != null) {
+                                String diseaseClassValue = getCellValueAsString(row.getCell(diseaseClassIndex));
+                                String institutionIdValueStr = getCellValueAsString(row.getCell(institutionIdIndex));
+
+                                if (!institutionIdValueStr.isEmpty()) {
+                                    try {
+                                        institutionIdValue = Integer.parseInt(institutionIdValueStr);
+                                    } catch (NumberFormatException e) {
+                                        // 잘못된 숫자 값 처리: 빈 값으로 설정
+                                        System.err.println("숫자로 변환할 수 없는 institutionId 값: " + institutionIdValueStr);
+                                        institutionIdValue = -1; // 잘못된 값은 -1로 설정
                                     }
-                                }
-                            }
 
-                            // 질환과 기관을 나타내는 컬럼의 인덱스 확인
-                            Integer diseaseClassIndex = headerIndexMap.get("DISEASE_CLASS");
-                            Integer institutionIdIndex = headerIndexMap.get("INSTITUTION_ID");
-
-                            if (diseaseClassIndex == null || institutionIdIndex == null) {
-                                continue;
-                            }
-
-                            // 9번째 행부터 데이터 읽기
-                            for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
-                                Row row = sheet.getRow(rowIndex);
-                                if (row != null) {
-                                    // 필터링을 위한 질환 및 기관 값 가져오기
-                                    String diseaseClassValue = getCellValueAsString(row.getCell(diseaseClassIndex));
-                                    String institutionIdValueStr = getCellValueAsString(row.getCell(institutionIdIndex));
-
-                                    // institutionIdValueStr이 비어 있지 않은지 확인
-                                    if (!institutionIdValueStr.isEmpty()) {
-                                        try {
-                                            int institutionIdValue = Integer.parseInt(institutionIdValueStr);
-
-                                            // 조건에 맞는 행만 추가 (질환 및 기관 필터링)
-                                            if (diseaseClassValue.equals(diseaseClass) && institutionIdValue == institutionId) {
-                                                Map<String, String> rowData = new LinkedHashMap<>();
-                                                for (String header : expectedHeaders) {
-                                                    Integer cellIndex = headerIndexMap.get(header);
-                                                    if (cellIndex != null) {
-                                                        Cell cell = row.getCell(cellIndex);
-                                                        String cellValue = (cell != null) ? getCellValueAsString(cell) : "";
-                                                        rowData.put(header, cellValue);
-                                                    }
-                                                }
-                                                // rowData에 실제 데이터가 있는지 확인하고, 데이터가 있으면 리스트에 추가
-                                                if (!rowData.isEmpty()) {
-                                                    dataList.add(rowData);
-                                                }
+                                    if (diseaseClassValue.equals(diseaseClass) && institutionIdValue == institutionId) {
+                                        Map<String, String> rowData = new LinkedHashMap<>();
+                                        for (String header : expectedHeaders) {
+                                            Integer cellIndex = headerIndexMap.get(header);
+                                            if (cellIndex != null) {
+                                                Cell cell = row.getCell(cellIndex);
+                                                String cellValue = (cell != null) ? getCellValueAsString(cell) : "";
+                                                rowData.put(header, cellValue);
                                             }
-                                        } catch (NumberFormatException e) {
-                                            // institutionIdValueStr이 숫자로 변환할 수 없는 경우 처리 (예: 로그 기록)
-                                            System.err.println("숫자로 변환할 수 없는 institutionId 값: "
-                                                    + institutionIdValueStr + " (파일: " + excelFile.getName() + ", 시트: " + sheetName + ")");
-
+                                        }
+                                        if (!rowData.isEmpty()) {
+                                            dataList.add(rowData);
                                         }
                                     }
                                 }
@@ -148,7 +147,6 @@ public class ExcelUploadService {
                 }
             }
         }
-
         return dataList;
     }
 
@@ -156,17 +154,10 @@ public class ExcelUploadService {
         File dir = new File(destDir);
         if (!dir.exists()) dir.mkdirs();
 
-        // 인코딩 문제 해결을 위해 다양한 인코딩 시도
         try (ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFilePath), Charset.forName("Cp437"))) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
-                String filePath;
-                try {
-                    filePath = Paths.get(destDir, entry.getName()).toString();
-                } catch (Exception e) {
-                    System.err.println("파일 이름 처리 중 오류 발생: " + e.getMessage());
-                    continue; // 문제가 있는 파일 이름은 무시하고 다음 파일로 넘어감
-                }
+                String filePath = Paths.get(destDir, entry.getName()).toString();
 
                 if (!entry.isDirectory()) {
                     extractFile(zis, filePath);
@@ -180,7 +171,6 @@ public class ExcelUploadService {
             e.printStackTrace();
             throw new IOException("ZIP 파일 내 파일 이름 처리 중 오류 발생: " + e.getMessage(), e);
         }
-
         return new File(destDir);
     }
 
@@ -195,7 +185,7 @@ public class ExcelUploadService {
     }
 
     private String getCellValueAsString(Cell cell) {
-        if (cell ==null) {
+        if (cell == null) {
             return "";
         }
         switch (cell.getCellType()) {
@@ -221,3 +211,6 @@ public class ExcelUploadService {
         }
     }
 }
+
+
+
