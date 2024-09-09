@@ -7,13 +7,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
-import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
 @Service
 public class ExcelUploadService {
@@ -25,53 +22,64 @@ public class ExcelUploadService {
     public String storeFile(MultipartFile file) throws IOException {
         String fileId = UUID.randomUUID().toString();
         String tempDir = System.getProperty("java.io.tmpdir");
-        Path filePath = Paths.get(tempDir, fileId + "_" + file.getOriginalFilename());
+        // 파일명에 포함된 공백이나 특수 문자를 제거
+        String sanitizedFileName = file.getOriginalFilename().replaceAll("[^a-zA-Z0-9\\.\\-]", "_");
+        Path filePath = Paths.get(tempDir, fileId + "_" + sanitizedFileName);
 
-        // 파일 저장
-        Files.write(filePath, file.getBytes());
+        try {
+            // 파일 저장
+            Files.write(filePath, file.getBytes());
+            // 파일이 제대로 저장되었는지 확인하는 로그
+            if (Files.exists(filePath)) {
+                System.out.println("파일 저장 성공: " + filePath.toString());
+            } else {
+                System.out.println("파일 저장 실패: " + filePath.toString());
+            }
 
-        // 파일 ID와 경로를 저장
-        fileStorage.put(fileId, filePath);
+            // 파일 ID와 경로를 저장
+            fileStorage.put(fileId, filePath);
+        } catch (IOException e) {
+            System.err.println("파일 저장 중 오류 발생: " + e.getMessage());
+            throw e;
+        }
 
         return fileId; // 고유한 파일 ID 반환
     }
 
-    // 파일 ID를 기반으로 데이터 분석을 수행하는 메소드
-    public List<Map<String, String>> analyzeData(String fileId, String diseaseClass, int institutionId) throws IOException {
-        Path filePath = fileStorage.get(fileId);
-        if (filePath == null) {
-            throw new IOException("파일을 찾을 수 없습니다. 파일 ID: " + fileId);
+    // 다중 파일 ID를 기반으로 데이터 분석을 수행하는 메소드
+    public List<Map<String, String>> analyzeData(String[] fileIds, String diseaseClass, int institutionId) throws IOException {
+        // fileIds가 null인지 확인
+        if (fileIds == null || fileIds.length == 0) {
+            throw new IllegalArgumentException("파일 ID 목록이 비어있거나 null입니다.");
         }
 
-        // 파일의 확장자를 확인하여 ZIP 또는 엑셀 파일로 처리
-        return processFile(new File(filePath.toString()), diseaseClass, institutionId);
+        List<Map<String, String>> combinedData = new ArrayList<>();
+
+        // 여러 파일 ID 처리
+        for (String fileId : fileIds) {
+            Path filePath = fileStorage.get(fileId);
+            if (filePath == null) {
+                throw new IOException("파일을 찾을 수 없습니다. 파일 ID: " + fileId);
+            }
+
+            // 엑셀 파일 분석 처리
+            List<Map<String, String>> fileData = processFile(new File(filePath.toString()), diseaseClass, institutionId);
+            combinedData.addAll(fileData);
+        }
+
+        return combinedData; // 모든 파일에서 추출된 데이터를 반환
     }
 
-    // 파일 확장자를 기반으로 ZIP 또는 엑셀 파일 처리
+
+    // 파일 확장자를 기반으로 엑셀 파일 처리
     public List<Map<String, String>> processFile(File file, String diseaseClass, int institutionId) throws IOException {
         String fileName = file.getName().toLowerCase();
 
-        if (fileName.endsWith(".zip")) {
-            return processZipFile(file, diseaseClass, institutionId);
-        } else if (fileName.endsWith(".xlsx")) {
+        if (fileName.endsWith(".xlsx")) {
             return processExcelFile(file, diseaseClass, institutionId);
         } else {
             throw new IllegalArgumentException("지원하지 않는 파일 형식입니다: " + fileName);
         }
-    }
-
-    // ZIP 파일 처리 및 필터링 메소드
-    public List<Map<String, String>> processZipFile(File file, String diseaseClass, int institutionId) throws IOException {
-        List<Map<String, String>> dataList = new ArrayList<>();
-        File extractedDir = unzip(file.getPath(), file.getParent());
-        File[] excelFiles = extractedDir.listFiles((dir, name) -> name.endsWith(".xlsx"));
-
-        if (excelFiles != null) {
-            for (File excelFile : excelFiles) {
-                dataList.addAll(processExcelFile(excelFile, diseaseClass, institutionId));
-            }
-        }
-        return dataList;
     }
 
     // 엑셀 파일 처리 및 필터링 메소드
@@ -121,7 +129,6 @@ public class ExcelUploadService {
                                     try {
                                         institutionIdValue = Integer.parseInt(institutionIdValueStr);
                                     } catch (NumberFormatException e) {
-                                        // 잘못된 숫자 값 처리: 빈 값으로 설정
                                         System.err.println("숫자로 변환할 수 없는 institutionId 값: " + institutionIdValueStr);
                                         institutionIdValue = -1; // 잘못된 값은 -1로 설정
                                     }
@@ -146,44 +153,14 @@ public class ExcelUploadService {
                     }
                 }
             }
+        } catch (Exception e) {
+            System.err.println("엑셀 파일 처리 중 오류 발생: " + e.getMessage());
+            throw e;
         }
         return dataList;
     }
 
-    private File unzip(String zipFilePath, String destDir) throws IOException {
-        File dir = new File(destDir);
-        if (!dir.exists()) dir.mkdirs();
-
-        try (ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFilePath), Charset.forName("Cp437"))) {
-            ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                String filePath = Paths.get(destDir, entry.getName()).toString();
-
-                if (!entry.isDirectory()) {
-                    extractFile(zis, filePath);
-                } else {
-                    File dirEntry = new File(filePath);
-                    dirEntry.mkdirs();
-                }
-                zis.closeEntry();
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new IOException("ZIP 파일 내 파일 이름 처리 중 오류 발생: " + e.getMessage(), e);
-        }
-        return new File(destDir);
-    }
-
-    private void extractFile(ZipInputStream zis, String filePath) throws IOException {
-        try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(filePath))) {
-            byte[] bytesIn = new byte[4096];
-            int read;
-            while ((read = zis.read(bytesIn)) != -1) {
-                bos.write(bytesIn, 0, read);
-            }
-        }
-    }
-
+    // 셀 데이터를 String으로 변환하는 메소드
     private String getCellValueAsString(Cell cell) {
         if (cell == null) {
             return "";
@@ -211,6 +188,3 @@ public class ExcelUploadService {
         }
     }
 }
-
-
-

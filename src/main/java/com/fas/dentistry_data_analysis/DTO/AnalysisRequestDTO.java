@@ -5,7 +5,7 @@ import lombok.Data;
 @Data
 public class AnalysisRequestDTO {
 
-    private String fileId;
+    private String[] fileIds;
     private int institutionId;
     private String diseaseClass;
 }
