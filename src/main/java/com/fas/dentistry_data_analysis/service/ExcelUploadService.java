@@ -1,5 +1,6 @@
 package com.fas.dentistry_data_analysis.service;
 
+import com.fas.dentistry_data_analysis.config.NewSheetHeaderMapping;
 import com.fas.dentistry_data_analysis.config.SheetHeaderMapping;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -159,6 +160,184 @@ public class ExcelUploadService {
         }
         return dataList;
     }
+
+    // 동적 필터링을 위한 메소드 추가
+    public List<Map<String, String>> analyzeDataWithFilters(String[] fileIds, Map<String, String> filterConditions) throws IOException {
+        if (fileIds == null || fileIds.length == 0) {
+            throw new IllegalArgumentException("파일 ID 목록이 비어있거나 null입니다.");
+        }
+
+        List<Map<String, String>> combinedData = new ArrayList<>();
+
+        for (String fileId : fileIds) {
+            Path filePath = fileStorage.get(fileId);
+            if (filePath == null) {
+                throw new IOException("파일을 찾을 수 없습니다. 파일 ID: " + fileId);
+            }
+            if (filterConditions.containsKey("DISEASE_CLASS") && filterConditions.get("DISEASE_CLASS").equals("All")) {
+                // 필터에서 "DISEASE_CLASS" 제거
+                filterConditions.remove("DISEASE_CLASS");
+            }
+
+
+            List<Map<String, String>> fileData = processFileWithFilters(new File(filePath.toString()), filterConditions);
+            combinedData.addAll(fileData);
+        }
+
+        return combinedData;
+    }
+
+    // 동적 필터링을 처리하는 메소드
+    private List<Map<String, String>> processFileWithFilters(File excelFile, Map<String, String> filterConditions) throws IOException {
+        List<Map<String, String>> dataList = new ArrayList<>();
+
+        try (InputStream inputStream = new FileInputStream(excelFile);
+             Workbook workbook = new XSSFWorkbook(inputStream)) {
+
+            int numberOfSheets = workbook.getNumberOfSheets();
+
+            for (int i = 0; i < numberOfSheets; i++) {
+                Sheet sheet = workbook.getSheetAt(i);
+                String sheetName = sheet.getSheetName().trim();
+                List<String> expectedHeaders = NewSheetHeaderMapping.getHeadersForSheet(sheetName);
+
+                if (expectedHeaders != null) {
+                    Row headerRow = sheet.getRow(3); // 4번째 행을 헤더로 가정
+                    if (headerRow == null) {
+                        throw new RuntimeException("헤더 행이 존재하지 않습니다.");
+                    }
+
+                    // 헤더 인덱스 맵 생성
+                    Map<String, Integer> headerIndexMap = new HashMap<>();
+                    for (int cellIndex = 0; cellIndex < headerRow.getLastCellNum(); cellIndex++) {
+                        Cell cell = headerRow.getCell(cellIndex);
+                        if (cell != null) {
+                            String headerName = cell.getStringCellValue().trim();
+                            if (expectedHeaders.contains(headerName)) {
+                                headerIndexMap.put(headerName, cellIndex);
+                            }
+                        }
+                    }
+
+                    // 필터 조건에 맞는 데이터 추출
+                    for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
+                        Row row = sheet.getRow(rowIndex);
+                        if (row != null && matchesConditions(row, headerIndexMap, filterConditions)) {
+                            Map<String, String> rowData = new LinkedHashMap<>();
+                            for (String header : expectedHeaders) {
+                                Integer cellIndex = headerIndexMap.get(header);
+                                if (cellIndex != null) {
+                                    Cell cell = row.getCell(cellIndex);
+                                    String cellValue = (cell != null) ? getCellValueAsString(cell) : "";
+                                    rowData.put(header, cellValue);
+                                }
+                            }
+                            dataList.add(rowData);
+                        }
+                    }
+                }
+            }
+        }
+        return dataList;
+    }
+
+    // 조건에 맞는지 확인하는 메소드
+    // 조건과 일치하는지 확인하는 메소드
+    private boolean matchesConditions(Row row, Map<String, Integer> headerIndexMap, Map<String, String> filterConditions) {
+        for (Map.Entry<String, String> condition : filterConditions.entrySet()) {
+            String header = condition.getKey();
+            String expectedValue = condition.getValue();
+            Integer cellIndex = headerIndexMap.get(header);
+
+            if (cellIndex != null) {
+                String cellValue = getCellValueAsString(row.getCell(cellIndex));
+
+                // 숫자 범위 조건의 경우, send 값에 맞는지 확인
+                if (header.equals("P_AGE")) {
+                    if (!matchesAgeCondition(cellValue, expectedValue)) {
+                        return false;
+                    }
+                } else if (header.equals("P_WEIGHT")) {
+                    if (!matchesWeightCondition(cellValue, expectedValue)) {
+                        return false;
+                    }
+                } else if (header.equals("P_HEIGHT")) {
+                    if (!matchesHeightCondition(cellValue, expectedValue)) {
+                        return false;
+                    }
+                } else {
+                    // 기본 문자열 비교
+                    if (!cellValue.equals(expectedValue)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true; // 모든 조건에 맞으면 true 반환
+    }
+
+    // 나이 필터링 로직 (P_AGE)
+    // 나이 필터링 로직 (P_AGE)
+    private boolean matchesAgeCondition(String actualValue, String expectedSendValue) {
+        if (actualValue == null || actualValue.trim().isEmpty()) {
+            return false;  // 값이 비어있으면 false를 반환
+        }
+
+        int age = Integer.parseInt(actualValue);
+        switch (expectedSendValue) {
+            case "0": return age < 40;
+            case "1": return age >= 40 && age <= 50;
+            case "2": return age >= 51 && age <= 60;
+            case "3": return age >= 61 && age <= 70;
+            case "4": return age >= 71 && age <= 80;
+            case "5": return age >= 81 && age <= 90;
+            case "6": return age > 90;
+            default: return false;
+        }
+    }
+
+    // 체중 필터링 로직 (P_WEIGHT)
+    private boolean matchesWeightCondition(String actualValue, String expectedSendValue) {
+        if (actualValue == null || actualValue.trim().isEmpty()) {
+            return false;  // 값이 비어있으면 false를 반환
+        }
+
+        int weight = Integer.parseInt(actualValue);
+        switch (expectedSendValue) {
+            case "0": return weight < 10;
+            case "1": return weight >= 10 && weight <= 20;
+            case "2": return weight >= 21 && weight <= 30;
+            case "3": return weight >= 31 && weight <= 40;
+            case "4": return weight >= 41 && weight <= 50;
+            case "5": return weight >= 51 && weight <= 60;
+            case "6": return weight >= 61 && weight <= 70;
+            case "7": return weight >= 71 && weight <= 80;
+            case "8": return weight >= 81 && weight <= 90;
+            case "9": return weight > 90;
+            default: return false;
+        }
+    }
+
+    // 키 필터링 로직 (P_HEIGHT)
+    private boolean matchesHeightCondition(String actualValue, String expectedSendValue) {
+        if (actualValue == null || actualValue.trim().isEmpty()) {
+            return false;  // 값이 비어있으면 false를 반환
+        }
+
+        int height = Integer.parseInt(actualValue);
+        switch (expectedSendValue) {
+            case "0": return height < 140;
+            case "1": return height >= 141 && height <= 150;
+            case "2": return height >= 151 && height <= 160;
+            case "3": return height >= 161 && height <= 170;
+            case "4": return height >= 171 && height <= 180;
+            case "5": return height >= 181 && height <= 190;
+            case "6": return height > 190;
+            default: return false;
+        }
+    }
+
+
 
     // 셀 데이터를 String으로 변환하는 메소드
     private String getCellValueAsString(Cell cell) {
