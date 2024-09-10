@@ -162,7 +162,7 @@ public class ExcelUploadService {
     }
 
     // 동적 필터링을 위한 메소드 추가
-    public List<Map<String, String>> analyzeDataWithFilters(String[] fileIds, Map<String, String> filterConditions) throws IOException {
+    public List<Map<String, String>> analyzeDataWithFilters(String[] fileIds, Map<String, String> filterConditions, List<String> headers) throws IOException {
         if (fileIds == null || fileIds.length == 0) {
             throw new IllegalArgumentException("파일 ID 목록이 비어있거나 null입니다.");
         }
@@ -179,15 +179,28 @@ public class ExcelUploadService {
                 filterConditions.remove("DISEASE_CLASS");
             }
 
-
+            // 필터링된 데이터를 가져옴
             List<Map<String, String>> fileData = processFileWithFilters(new File(filePath.toString()), filterConditions);
-            combinedData.addAll(fileData);
+
+            // header에 해당하는 값만 추출하여 combinedData에 추가
+            for (Map<String, String> rowData : fileData) {
+                // DISEASE_CLASS가 비어 있지 않은 경우만 가져오기
+                String diseaseClassValue = rowData.get("DISEASE_CLASS");
+                if (diseaseClassValue != null && !diseaseClassValue.trim().isEmpty()) {
+                    Map<String, String> filteredRowData = new HashMap<>();
+                    for (String header : headers) {
+                        if (rowData.containsKey(header)) {
+                            filteredRowData.put(header, rowData.get(header));
+                        }
+                    }
+                    combinedData.add(filteredRowData);
+                }
+            }
         }
 
         return combinedData;
     }
-
-    // 동적 필터링을 처리하는 메소드
+    // 동적 필터링을 처리하는 메소드 (기존)
     private List<Map<String, String>> processFileWithFilters(File excelFile, Map<String, String> filterConditions) throws IOException {
         List<Map<String, String>> dataList = new ArrayList<>();
 
@@ -241,7 +254,6 @@ public class ExcelUploadService {
         return dataList;
     }
 
-    // 조건에 맞는지 확인하는 메소드
     // 조건과 일치하는지 확인하는 메소드
     private boolean matchesConditions(Row row, Map<String, Integer> headerIndexMap, Map<String, String> filterConditions) {
         for (Map.Entry<String, String> condition : filterConditions.entrySet()) {

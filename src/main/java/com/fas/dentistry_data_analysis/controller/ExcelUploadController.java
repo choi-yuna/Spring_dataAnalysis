@@ -62,7 +62,7 @@ public class ExcelUploadController {
     @PostMapping("/analyze-filters")
     public ResponseEntity<?> analyzeDataWithFilters(@RequestBody Map<String, Object> filterRequest) {
         try {
-            // fileIds를 먼저 추출
+            // fileIds 추출
             log.info("Analyzing data with filters: {}", filterRequest);
             List<String> fileIdsList = (List<String>) filterRequest.get("fileIds");
             String[] fileIds = fileIdsList.toArray(new String[0]);
@@ -70,15 +70,17 @@ public class ExcelUploadController {
             // 필터 조건 추출 (INSTITUTION_ID, P_GENDER 등)
             Map<String, String> filters = new HashMap<>();
             filterRequest.forEach((key, value) -> {
-                if (!key.equals("fileIds")) {  // fileIds는 제외하고 나머지 필터 추가
+                if (!key.equals("fileIds") && !key.equals("header")) {  // fileIds와 header는 제외
                     filters.put(key, value.toString());
                 }
             });
 
-            log.info("Analyzing data with filters for file IDs: {}, filters: {}", Arrays.toString(fileIds), filters);
+            // header 값 추출
+            List<String> headers = (List<String>) filterRequest.get("header");
+            log.info("Analyzing data with filters for file IDs: {}, filters: {}, headers: {}", Arrays.toString(fileIds), filters, headers);
 
-            // 동적 필터링을 통해 데이터 분석 수행
-            List<Map<String, String>> filteredDataList = excelUploadService.analyzeDataWithFilters(fileIds, filters);
+            // 동적 필터링과 헤더 필터링을 수행
+            List<Map<String, String>> filteredDataList = excelUploadService.analyzeDataWithFilters(fileIds, filters, headers);
 
             return ResponseEntity.ok(Map.of("data", filteredDataList));
 
@@ -87,4 +89,5 @@ public class ExcelUploadController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("데이터 분석 중 오류가 발생했습니다.");
         }
     }
+
 }

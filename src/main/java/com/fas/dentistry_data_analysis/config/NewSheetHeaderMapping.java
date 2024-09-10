@@ -12,13 +12,18 @@ public class NewSheetHeaderMapping {
         sheetHeaderMap.put("(치주질환) CRF", Arrays.asList(
                 "DISEASE_CLASS","INSTITUTION_ID", "CAPTURE_TIME", "MAKER_INFO",
                 // 환자 정보
-                "P_GENDER", "P_AGE", "P_WEIGHT", "P_HEIGHT", "P_RES_AREA",
+                "P_GENDER", "P_AGE", "P_WEIGHT", "P_HEIGHT",
                 // 질병력
                 "MH_DIABETES", "MH_HIGHBLOOD", "MH_OSTEOPROSIS", "MH_NOTE",
                 // 생활 습관
                 "LS_SMOKE", "LS_ALCHOLE",
                 // 진단정보별 환자수
-                "DIA_PERIO", "DIA_NOTE", "DIA_MISSTEETH_A", "DIA_MISSTEETH_B", "DIA_MISSTEETH_C"
+                "DIA_PERIO",
+                // 치아
+                "Tooth_11", "Tooth_12", "Tooth_13", "Tooth_14", "Tooth_15", "Tooth_16", "Tooth_17", "Tooth_18",
+                "Tooth_21", "Tooth_22", "Tooth_23", "Tooth_24", "Tooth_25", "Tooth_26", "Tooth_27", "Tooth_28",
+                "Tooth_31", "Tooth_32", "Tooth_33", "Tooth_34", "Tooth_35", "Tooth_36", "Tooth_37", "Tooth_38",
+                "Tooth_41", "Tooth_42", "Tooth_43", "Tooth_44", "Tooth_45", "Tooth_46", "Tooth_47", "Tooth_48"
         ));
 
         sheetHeaderMap.put("(골수염) CRF", Arrays.asList(
