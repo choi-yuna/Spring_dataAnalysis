@@ -1,6 +1,5 @@
 package com.fas.dentistry_data_analysis.service;
 
-import com.fas.dentistry_data_analysis.config.NewSheetHeaderMapping;
 import com.fas.dentistry_data_analysis.config.SheetHeaderMapping;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -187,8 +186,8 @@ public class ExcelUploadService {
             for (Map<String, String> rowData : fileData) {
                 Map<String, String> filteredRowData = new HashMap<>();
 
-                // "All"이면 질환 데이터가 존재하는 행만 추가
-                if (filterConditions.isEmpty()) {
+                // "All"인 경우 모든 데이터에서 DISEASE_CLASS가 비어 있지 않은 행만 추가
+                if (filterConditions.containsKey("DISEASE_CLASS") && filterConditions.get("DISEASE_CLASS").equals("All")) {
                     String diseaseClassValue = rowData.get("DISEASE_CLASS");
                     if (diseaseClassValue == null || diseaseClassValue.trim().isEmpty()) {
                         continue;  // DISEASE_CLASS 값이 없는 행은 제외
