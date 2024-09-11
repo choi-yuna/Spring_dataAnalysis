@@ -1,6 +1,7 @@
 package com.fas.dentistry_data_analysis.service;
 
 import com.fas.dentistry_data_analysis.config.SheetHeaderMapping;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
@@ -12,6 +13,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
+@Slf4j
 @Service
 public class ExcelUploadService {
 
@@ -214,7 +216,7 @@ public class ExcelUploadService {
 
     // 동적 필터링을 처리하는 메소드 (기존)
     private List<Map<String, String>> processFileWithFilters(File excelFile, Map<String, String> filterConditions, List<String> headers) throws IOException {
-        List<Map<String, String>> dataList = new ArrayList<>();
+        List<Map<String, String>> filteredData = new ArrayList<>();
 
         try (InputStream inputStream = new FileInputStream(excelFile);
              Workbook workbook = new XSSFWorkbook(inputStream)) {
@@ -223,48 +225,45 @@ public class ExcelUploadService {
 
             for (int i = 0; i < numberOfSheets; i++) {
                 Sheet sheet = workbook.getSheetAt(i);
-
-                // 헤더 행 추출 (일반적으로 첫 번째 행 또는 특정 행에 헤더가 있을 수 있음)
-                Row headerRow = sheet.getRow(3); // 4번째 행을 헤더로 가정 (이 부분은 시트에 따라 다를 수 있음)
+                Row headerRow = sheet.getRow(3); // 4번째 행을 헤더로 가정
                 if (headerRow == null) {
                     continue;
                 }
 
-                // 클라이언트가 제공한 headers를 기반으로 엑셀 헤더 인덱스를 찾음
+                // 헤더 행의 인덱스 매핑
                 Map<String, Integer> headerIndexMap = new HashMap<>();
                 for (int cellIndex = 0; cellIndex < headerRow.getLastCellNum(); cellIndex++) {
                     Cell cell = headerRow.getCell(cellIndex);
                     if (cell != null) {
                         String headerName = cell.getStringCellValue().trim();
-                        if (headers.contains(headerName)) {
-                            headerIndexMap.put(headerName, cellIndex);
-                        }
+                        // 요청된 헤더에 포함된 것만 매핑
+                        headerIndexMap.put(headerName, cellIndex);
                     }
                 }
 
-                // 필터 조건에 맞는 데이터 추출
+                // 모든 데이터를 먼저 필터링
                 for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) {  // 9번째 행부터 데이터 읽기
                     Row row = sheet.getRow(rowIndex);
                     if (row != null && matchesConditions(row, headerIndexMap, filterConditions)) {
                         Map<String, String> rowData = new LinkedHashMap<>();
+                        // 필터링된 데이터에서 헤더에 맞는 값만 추출
                         for (String header : headers) {
                             Integer cellIndex = headerIndexMap.get(header);
                             if (cellIndex != null) {
                                 Cell cell = row.getCell(cellIndex);
                                 String cellValue = (cell != null) ? getCellValueAsString(cell) : "";
-                                if (cellValue != null && !cellValue.trim().isEmpty()) {
-                                    rowData.put(header, cellValue);
-                                }
+                                rowData.put(header, cellValue);
                             }
                         }
-                        dataList.add(rowData);
+                        if (!rowData.isEmpty()) {
+                            filteredData.add(rowData);
+                        }
                     }
                 }
             }
         }
-        return dataList;
+        return filteredData;
     }
-
 
     // 조건과 일치하는지 확인하는 메소드
     private boolean matchesConditions(Row row, Map<String, Integer> headerIndexMap, Map<String, String> filterConditions) {
@@ -297,8 +296,9 @@ public class ExcelUploadService {
                 }
             }
         }
-        return true; // 모든 조건에 맞으면 true 반환
+        return true; // 모든 조건을 만족하면 true 반환
     }
+
 
     // 나이 필터링 로직 (P_AGE)
     // 나이 필터링 로직 (P_AGE)
