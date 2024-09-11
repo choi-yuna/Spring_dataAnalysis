@@ -174,25 +174,36 @@ public class ExcelUploadService {
             if (filePath == null) {
                 throw new IOException("파일을 찾을 수 없습니다. 파일 ID: " + fileId);
             }
+
+            // "All" 처리: DISEASE_CLASS 값이 있는 데이터만 추출
             if (filterConditions.containsKey("DISEASE_CLASS") && filterConditions.get("DISEASE_CLASS").equals("All")) {
-                // 필터에서 "DISEASE_CLASS" 제거
                 filterConditions.remove("DISEASE_CLASS");
             }
 
             // 필터링된 데이터를 가져옴
-            List<Map<String, String>> fileData = processFileWithFilters(new File(filePath.toString()), filterConditions);
+            List<Map<String, String>> fileData = processFileWithFilters(new File(filePath.toString()), filterConditions, headers);
 
             // header에 해당하는 값만 추출하여 combinedData에 추가
             for (Map<String, String> rowData : fileData) {
-                // DISEASE_CLASS가 비어 있지 않은 경우만 가져오기
-                String diseaseClassValue = rowData.get("DISEASE_CLASS");
-                if (diseaseClassValue != null && !diseaseClassValue.trim().isEmpty()) {
-                    Map<String, String> filteredRowData = new HashMap<>();
-                    for (String header : headers) {
-                        if (rowData.containsKey(header)) {
-                            filteredRowData.put(header, rowData.get(header));
-                        }
+                Map<String, String> filteredRowData = new HashMap<>();
+
+                // "All"이면 질환 데이터가 존재하는 행만 추가
+                if (filterConditions.isEmpty()) {
+                    String diseaseClassValue = rowData.get("DISEASE_CLASS");
+                    if (diseaseClassValue == null || diseaseClassValue.trim().isEmpty()) {
+                        continue;  // DISEASE_CLASS 값이 없는 행은 제외
                     }
+                }
+
+                // 헤더에 맞는 값만 필터링
+                for (String header : headers) {
+                    if (rowData.containsKey(header) && rowData.get(header) != null && !rowData.get(header).trim().isEmpty()) {
+                        filteredRowData.put(header, rowData.get(header));
+                    }
+                }
+
+                // 빈 행은 추가하지 않음
+                if (!filteredRowData.isEmpty()) {
                     combinedData.add(filteredRowData);
                 }
             }
@@ -200,8 +211,10 @@ public class ExcelUploadService {
 
         return combinedData;
     }
+
+
     // 동적 필터링을 처리하는 메소드 (기존)
-    private List<Map<String, String>> processFileWithFilters(File excelFile, Map<String, String> filterConditions) throws IOException {
+    private List<Map<String, String>> processFileWithFilters(File excelFile, Map<String, String> filterConditions, List<String> headers) throws IOException {
         List<Map<String, String>> dataList = new ArrayList<>();
 
         try (InputStream inputStream = new FileInputStream(excelFile);
@@ -211,48 +224,48 @@ public class ExcelUploadService {
 
             for (int i = 0; i < numberOfSheets; i++) {
                 Sheet sheet = workbook.getSheetAt(i);
-                String sheetName = sheet.getSheetName().trim();
-                List<String> expectedHeaders = NewSheetHeaderMapping.getHeadersForSheet(sheetName);
 
-                if (expectedHeaders != null) {
-                    Row headerRow = sheet.getRow(3); // 4번째 행을 헤더로 가정
-                    if (headerRow == null) {
-                        throw new RuntimeException("헤더 행이 존재하지 않습니다.");
-                    }
+                // 헤더 행 추출 (일반적으로 첫 번째 행 또는 특정 행에 헤더가 있을 수 있음)
+                Row headerRow = sheet.getRow(3); // 4번째 행을 헤더로 가정 (이 부분은 시트에 따라 다를 수 있음)
+                if (headerRow == null) {
+                    continue;
+                }
 
-                    // 헤더 인덱스 맵 생성
-                    Map<String, Integer> headerIndexMap = new HashMap<>();
-                    for (int cellIndex = 0; cellIndex < headerRow.getLastCellNum(); cellIndex++) {
-                        Cell cell = headerRow.getCell(cellIndex);
-                        if (cell != null) {
-                            String headerName = cell.getStringCellValue().trim();
-                            if (expectedHeaders.contains(headerName)) {
-                                headerIndexMap.put(headerName, cellIndex);
-                            }
+                // 클라이언트가 제공한 headers를 기반으로 엑셀 헤더 인덱스를 찾음
+                Map<String, Integer> headerIndexMap = new HashMap<>();
+                for (int cellIndex = 0; cellIndex < headerRow.getLastCellNum(); cellIndex++) {
+                    Cell cell = headerRow.getCell(cellIndex);
+                    if (cell != null) {
+                        String headerName = cell.getStringCellValue().trim();
+                        if (headers.contains(headerName)) {
+                            headerIndexMap.put(headerName, cellIndex);
                         }
                     }
+                }
 
-                    // 필터 조건에 맞는 데이터 추출
-                    for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
-                        Row row = sheet.getRow(rowIndex);
-                        if (row != null && matchesConditions(row, headerIndexMap, filterConditions)) {
-                            Map<String, String> rowData = new LinkedHashMap<>();
-                            for (String header : expectedHeaders) {
-                                Integer cellIndex = headerIndexMap.get(header);
-                                if (cellIndex != null) {
-                                    Cell cell = row.getCell(cellIndex);
-                                    String cellValue = (cell != null) ? getCellValueAsString(cell) : "";
+                // 필터 조건에 맞는 데이터 추출
+                for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) {  // 9번째 행부터 데이터 읽기
+                    Row row = sheet.getRow(rowIndex);
+                    if (row != null && matchesConditions(row, headerIndexMap, filterConditions)) {
+                        Map<String, String> rowData = new LinkedHashMap<>();
+                        for (String header : headers) {
+                            Integer cellIndex = headerIndexMap.get(header);
+                            if (cellIndex != null) {
+                                Cell cell = row.getCell(cellIndex);
+                                String cellValue = (cell != null) ? getCellValueAsString(cell) : "";
+                                if (cellValue != null && !cellValue.trim().isEmpty()) {
                                     rowData.put(header, cellValue);
                                 }
                             }
-                            dataList.add(rowData);
                         }
+                        dataList.add(rowData);
                     }
                 }
             }
         }
         return dataList;
     }
+
 
     // 조건과 일치하는지 확인하는 메소드
     private boolean matchesConditions(Row row, Map<String, Integer> headerIndexMap, Map<String, String> filterConditions) {
