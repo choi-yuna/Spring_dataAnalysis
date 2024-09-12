@@ -163,7 +163,6 @@ public class ExcelUploadService {
     }
 
     // 동적 필터링을 위한 메소드 추가
-    // 동적 필터링을 위한 메소드 추가
     public Map<String, List<Map<String, Object>>> analyzeDataWithFilters(String[] fileIds, Map<String, String> filterConditions, List<String> headers) throws IOException {
         if (fileIds == null || fileIds.length == 0) {
             throw new IllegalArgumentException("파일 ID 목록이 비어있거나 null입니다.");
@@ -178,6 +177,11 @@ public class ExcelUploadService {
                 throw new IOException("파일을 찾을 수 없습니다. 파일 ID: " + fileId);
             }
 
+            // "All" 처리: DISEASE_CLASS 값이 있는 데이터만 추출
+            if (filterConditions.containsKey("DISEASE_CLASS") && filterConditions.get("DISEASE_CLASS").equals("All")) {
+                filterConditions.remove("DISEASE_CLASS");
+            }
+
             // 필터링된 데이터를 가져옴
             List<Map<String, String>> fileData = processFileWithFilters(new File(filePath.toString()), filterConditions, headers);
 
@@ -187,16 +191,13 @@ public class ExcelUploadService {
                     String value = rowData.getOrDefault(header, "").trim();
 
                     if (!value.isEmpty()) {
-                        // 클라이언트에서 온 값을 범위로 변환
-                        String rangeValue = getRangeForHeader(header, value);
-
                         // 해당 헤더의 빈도수 리스트 초기화
                         frequencyMap.putIfAbsent(header, new ArrayList<>());
 
                         // 해당 헤더에 이미 동일한 값이 있는지 확인
                         List<Map<String, Object>> valueList = frequencyMap.get(header);
                         Optional<Map<String, Object>> existingEntry = valueList.stream()
-                                .filter(entry -> entry.get("value").equals(rangeValue))
+                                .filter(entry -> entry.get("value").equals(value))
                                 .findFirst();
 
                         if (existingEntry.isPresent()) {
@@ -207,7 +208,7 @@ public class ExcelUploadService {
                         } else {
                             // 새로운 값이면 리스트에 추가
                             Map<String, Object> newValueCountMap = new LinkedHashMap<>();
-                            newValueCountMap.put("value", rangeValue); // 범위로 변환된 값
+                            newValueCountMap.put("value", value);
                             newValueCountMap.put("count", 1);
                             valueList.add(newValueCountMap);
                         }
@@ -218,87 +219,6 @@ public class ExcelUploadService {
 
         return frequencyMap;  // 각 헤더별 값과 빈도수를 리스트로 반환
     }
-
-    // 헤더에 따라 구간을 결정하는 메소드
-    private String getRangeForHeader(String header, String value) {
-        switch (header) {
-            case "P_AGE":
-                return getAgeRange(value);
-            case "P_WEIGHT":
-                return getWeightRange(value);
-            case "P_HEIGHT":
-                return getHeightRange(value);
-            default:
-                return value;  // 구간이 필요 없는 경우 원래 값을 반환
-        }
-    }
-
-    // 나이 필터링 구간 설정
-    private String getAgeRange(String value) {
-        int age = Integer.parseInt(value);
-        if (age < 40) {
-            return "40미만";
-        } else if (age >= 40 && age <= 50) {
-            return "40-50";
-        } else if (age >= 51 && age <= 60) {
-            return "51-60";
-        } else if (age >= 61 && age <= 70) {
-            return "61-70";
-        } else if (age >= 71 && age <= 80) {
-            return "71-80";
-        } else if (age >= 81 && age <= 90) {
-            return "81-90";
-        } else {
-            return "91+";
-        }
-    }
-
-    // 체중 필터링 구간 설정
-    private String getWeightRange(String value) {
-        int weight = Integer.parseInt(value);
-        if (weight < 10) {
-            return "0-9";
-        } else if (weight >= 10 && weight <= 20) {
-            return "10-20";
-        } else if (weight >= 21 && weight <= 30) {
-            return "21-30";
-        } else if (weight >= 31 && weight <= 40) {
-            return "31-40";
-        } else if (weight >= 41 && weight <= 50) {
-            return "41-50";
-        } else if (weight >= 51 && weight <= 60) {
-            return "51-60";
-        } else if (weight >= 61 && weight <= 70) {
-            return "61-70";
-        } else if (weight >= 71 && weight <= 80) {
-            return "71-80";
-        } else if (weight >= 81 && weight <= 90) {
-            return "81-90";
-        } else {
-            return "90+";
-        }
-    }
-
-    // 키 필터링 구간 설정
-    private String getHeightRange(String value) {
-        int height = Integer.parseInt(value);
-        if (height < 140) {
-            return "140 미만";
-        } else if (height >= 140 && height <= 150) {
-            return "140-150";
-        } else if (height >= 151 && height <= 160) {
-            return "151-160";
-        } else if (height >= 161 && height <= 170) {
-            return "161-170";
-        } else if (height >= 171 && height <= 180) {
-            return "171-180";
-        } else if (height >= 181 && height <= 190) {
-            return "181-190";
-        } else {
-            return "190+";
-        }
-    }
-
 
 
 
