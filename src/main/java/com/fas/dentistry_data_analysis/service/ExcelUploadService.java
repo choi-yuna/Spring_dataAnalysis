@@ -1,6 +1,7 @@
 package com.fas.dentistry_data_analysis.service;
 
 import com.fas.dentistry_data_analysis.config.SheetHeaderMapping;
+import com.fas.dentistry_data_analysis.util.HeaderMappingService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -163,32 +164,43 @@ public class ExcelUploadService {
     }
 
     // 동적 필터링을 위한 메소드 추가
-    // 동적 필터링을 위한 메소드 수정
-    public Map<String, List<Map<String, Object>>> analyzeDataWithFilters(String[] fileIds, Map<String, String> filterConditions, List<String> headers) throws IOException {
+    public List<Map<String, Object>> analyzeDataWithFilters(String[] fileIds, Map<String, String> filterConditions, List<String> headers) throws IOException {
         if (fileIds == null || fileIds.length == 0) {
             throw new IllegalArgumentException("파일 ID 목록이 비어있거나 null입니다.");
         }
 
-        // 빈도수 저장을 위한 Map
-        Map<String, List<Map<String, Object>>> frequencyMap = new HashMap<>();
+        List<Map<String, Object>> responseList = new ArrayList<>();
 
-        for (String fileId : fileIds) {
-            Path filePath = fileStorage.get(fileId);
-            if (filePath == null) {
-                throw new IOException("파일을 찾을 수 없습니다. 파일 ID: " + fileId);
-            }
+        for (String header : headers) {
+            Map<String, Object> result = new HashMap<>();
 
-            // "All" 처리: DISEASE_CLASS 값이 있는 데이터만 추출
-            if (filterConditions.containsKey("DISEASE_CLASS") && filterConditions.get("DISEASE_CLASS").equals("All")) {
-                filterConditions.remove("DISEASE_CLASS");
-            }
+            // 제목과 헤더 결정
+            String title = HeaderMappingService.determineTitleBasedOnHeaders(Arrays.asList(header));
+            List<String> dynamicHeaders = HeaderMappingService.determineHeadersBasedOnFilters(Arrays.asList(header));
 
-            // 필터링된 데이터를 가져옴
-            List<Map<String, String>> fileData = processFileWithFilters(new File(filePath.toString()), filterConditions, headers);
+            result.put("id", header);  // 예: institution_ID, age_ID
+            result.put("title", title);
+            result.put("headers", dynamicHeaders);
 
-            // 각 헤더 값에 대한 빈도수 계산 및 구조화
-            for (Map<String, String> rowData : fileData) {
-                for (String header : headers) {
+            // 빈도수 저장을 위한 Map
+            List<Map<String, Object>> rows = new ArrayList<>();
+
+            for (String fileId : fileIds) {
+                Path filePath = fileStorage.get(fileId);
+                if (filePath == null) {
+                    throw new IOException("파일을 찾을 수 없습니다. 파일 ID: " + fileId);
+                }
+
+                // "All" 처리: DISEASE_CLASS 값이 있는 데이터만 추출
+                if (filterConditions.containsKey("DISEASE_CLASS") && filterConditions.get("DISEASE_CLASS").equals("All")) {
+                    filterConditions.remove("DISEASE_CLASS");
+                }
+
+                // 필터링된 데이터를 가져옴
+                List<Map<String, String>> fileData = processFileWithFilters(new File(filePath.toString()), filterConditions, Arrays.asList(header));
+
+                // 각 헤더 값에 대한 빈도수 계산 및 구조화
+                for (Map<String, String> rowData : fileData) {
                     String value = rowData.getOrDefault(header, "").trim();
 
                     if (!value.isEmpty()) {
@@ -201,13 +213,9 @@ public class ExcelUploadService {
                             value = getHeightRange(value);
                         }
 
-                        // 해당 헤더의 빈도수 리스트 초기화
-                        frequencyMap.putIfAbsent(header, new ArrayList<>());
-
-                        // 해당 헤더에 이미 동일한 값이 있는지 확인
-                        List<Map<String, Object>> valueList = frequencyMap.get(header);
+                        // 해당 값이 rows에 이미 있는지 확인
                         String finalValue = value;
-                        Optional<Map<String, Object>> existingEntry = valueList.stream()
+                        Optional<Map<String, Object>> existingEntry = rows.stream()
                                 .filter(entry -> entry.get("value").equals(finalValue))
                                 .findFirst();
 
@@ -217,19 +225,24 @@ public class ExcelUploadService {
                             int currentCount = (int) entry.get("count");
                             entry.put("count", currentCount + 1);
                         } else {
-                            // 새로운 값이면 리스트에 추가
+                            // 새로운 값이면 rows에 추가
                             Map<String, Object> newValueCountMap = new LinkedHashMap<>();
+                            newValueCountMap.put("id", value);  // 고유 ID로 value 사용
                             newValueCountMap.put("value", value);
                             newValueCountMap.put("count", 1);
-                            valueList.add(newValueCountMap);
+                            rows.add(newValueCountMap);
                         }
                     }
                 }
             }
+
+            result.put("rows", rows);
+            responseList.add(result);  // 최종 결과 리스트에 추가
         }
 
-        return frequencyMap;  // 각 헤더별 값과 빈도수를 리스트로 반환
+        return responseList;  // 제목, 헤더, 빈도수를 포함한 결과 반환
     }
+
 
     // 나이 필터링 구간 설정
     private String getAgeRange(String value) {
