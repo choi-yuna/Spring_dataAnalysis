@@ -1,4 +1,4 @@
-package com.fas.dentistry_data_analysis;
+package com.fas.dentistry_data_analysis.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
