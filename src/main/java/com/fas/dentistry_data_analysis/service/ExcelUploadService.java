@@ -227,7 +227,6 @@ public class ExcelUploadService {
                         } else {
                             // 새로운 값이면 rows에 추가
                             Map<String, Object> newValueCountMap = new LinkedHashMap<>();
-                            newValueCountMap.put("id", value);  // 고유 ID로 value 사용
                             newValueCountMap.put("value", value);
                             newValueCountMap.put("count", 1);
                             rows.add(newValueCountMap);
