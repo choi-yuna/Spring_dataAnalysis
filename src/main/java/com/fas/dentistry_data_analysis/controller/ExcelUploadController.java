@@ -79,15 +79,18 @@ public class ExcelUploadController {
             List<String> headers = (List<String>) filterRequest.get("header");
             log.info("Analyzing data with filters for file IDs: {}, filters: {}, headers: {}", Arrays.toString(fileIds), filters, headers);
 
-            // 동적 필터링과 헤더 필터링을 수행
-            List<Map<String, String>> filteredDataList = excelUploadService.analyzeDataWithFilters(fileIds, filters, headers);
+            // 동적 필터링과 헤더 필터링을 수행하고 Map<String, List<Map<String, Object>>> 반환
+            Map<String, List<Map<String, Object>>> filteredDataMap = excelUploadService.analyzeDataWithFilters(fileIds, filters, headers);
 
-            return ResponseEntity.ok(Map.of("data", filteredDataList));
+            // 변환된 데이터를 그대로 클라이언트에 반환
+            return ResponseEntity.ok(Map.of("data", filteredDataMap));
 
         } catch (IOException e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("데이터 분석 중 오류가 발생했습니다.");
         }
     }
+
+
 
 }
