@@ -2,6 +2,7 @@ package com.fas.dentistry_data_analysis.controller;
 
 import com.fas.dentistry_data_analysis.DTO.AnalysisRequestDTO;
 import com.fas.dentistry_data_analysis.service.ExcelUploadService;
+import com.fas.dentistry_data_analysis.util.HeaderMappingService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -79,11 +80,11 @@ public class ExcelUploadController {
             List<String> headers = (List<String>) filterRequest.get("header");
             log.info("Analyzing data with filters for file IDs: {}, filters: {}, headers: {}", Arrays.toString(fileIds), filters, headers);
 
-            // 동적 필터링과 헤더 필터링을 수행하고 Map<String, List<Map<String, Object>>> 반환
-            Map<String, List<Map<String, Object>>> filteredDataMap = excelUploadService.analyzeDataWithFilters(fileIds, filters, headers);
+            // 동적 필터링과 헤더 필터링을 수행하고 List<Map<String, Object>> 반환
+            List<Map<String, Object>> filteredDataList = excelUploadService.analyzeDataWithFilters(fileIds, filters, headers);
 
-            // 변환된 데이터를 그대로 클라이언트에 반환
-            return ResponseEntity.ok(Map.of("data", filteredDataMap));
+            // 변환된 List를 클라이언트에 반환
+            return ResponseEntity.ok(filteredDataList);
 
         } catch (IOException e) {
             e.printStackTrace();
