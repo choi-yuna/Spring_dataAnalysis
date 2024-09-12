@@ -163,6 +163,7 @@ public class ExcelUploadService {
     }
 
     // 동적 필터링을 위한 메소드 추가
+    // 동적 필터링을 위한 메소드 수정
     public Map<String, List<Map<String, Object>>> analyzeDataWithFilters(String[] fileIds, Map<String, String> filterConditions, List<String> headers) throws IOException {
         if (fileIds == null || fileIds.length == 0) {
             throw new IllegalArgumentException("파일 ID 목록이 비어있거나 null입니다.");
@@ -191,13 +192,23 @@ public class ExcelUploadService {
                     String value = rowData.getOrDefault(header, "").trim();
 
                     if (!value.isEmpty()) {
+                        // 특정 헤더에 대해서만 구간별로 처리
+                        if (header.equals("P_AGE")) {
+                            value = getAgeRange(value);
+                        } else if (header.equals("P_WEIGHT")) {
+                            value = getWeightRange(value);
+                        } else if (header.equals("P_HEIGHT")) {
+                            value = getHeightRange(value);
+                        }
+
                         // 해당 헤더의 빈도수 리스트 초기화
                         frequencyMap.putIfAbsent(header, new ArrayList<>());
 
                         // 해당 헤더에 이미 동일한 값이 있는지 확인
                         List<Map<String, Object>> valueList = frequencyMap.get(header);
+                        String finalValue = value;
                         Optional<Map<String, Object>> existingEntry = valueList.stream()
-                                .filter(entry -> entry.get("value").equals(value))
+                                .filter(entry -> entry.get("value").equals(finalValue))
                                 .findFirst();
 
                         if (existingEntry.isPresent()) {
@@ -219,6 +230,73 @@ public class ExcelUploadService {
 
         return frequencyMap;  // 각 헤더별 값과 빈도수를 리스트로 반환
     }
+
+    // 나이 필터링 구간 설정
+    private String getAgeRange(String value) {
+        int age = Integer.parseInt(value);
+        if (age < 10) {
+            return "0-9";
+        } else if (age >= 10 && age <= 20) {
+            return "10-20";
+        } else if (age >= 21 && age <= 30) {
+            return "21-30";
+        } else if (age >= 31 && age <= 40) {
+            return "31-40";
+        } else if (age >= 41 && age <= 50) {
+            return "41-50";
+        } else if (age >= 51 && age <= 60) {
+            return "51-60";
+        } else if (age >= 61 && age <= 70) {
+            return "61-70";
+        } else if (age >= 71 && age <= 80) {
+            return "71-80";
+        } else if (age >= 81 && age <= 90) {
+            return "81-90";
+        } else {
+            return "90+";
+        }
+    }
+
+    // 체중 필터링 구간 설정
+    private String getWeightRange(String value) {
+        int weight = Integer.parseInt(value);
+        if (weight < 40) {
+            return "40 미만";
+        } else if (weight >= 40 && weight <= 50) {
+            return "40-50";
+        } else if (weight >= 51 && weight <= 60) {
+            return "51-60";
+        } else if (weight >= 61 && weight <= 70) {
+            return "61-70";
+        } else if (weight >= 71 && weight <= 80) {
+            return "71-80";
+        } else if (weight >= 81 && weight <= 90) {
+            return "81-90";
+        } else {
+            return "91+";
+        }
+    }
+
+    // 키 필터링 구간 설정
+    private String getHeightRange(String value) {
+        int height = Integer.parseInt(value);
+        if (height < 140) {
+            return "140 미만";
+        } else if (height >= 140 && height <= 150) {
+            return "140-150";
+        } else if (height >= 151 && height <= 160) {
+            return "151-160";
+        } else if (height >= 161 && height <= 170) {
+            return "161-170";
+        } else if (height >= 171 && height <= 180) {
+            return "171-180";
+        } else if (height >= 181 && height <= 190) {
+            return "181-190";
+        } else {
+            return "190+";
+        }
+    }
+
 
 
 
