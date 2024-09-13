@@ -227,6 +227,9 @@ public class ExcelUploadService{
                         } else if (header.equals("P_HEIGHT")) {
                             value = getHeightRange(value);  // 구간 처리
                             mappedValue = value;
+                        } else if (header.equals("CAPTURE_TIME")) {
+                            value = getYearRange(value);  // 구간 처리
+                            mappedValue = value;
                         } else if (header.equals("INSTITUTION_ID")) {
                             mappedValue = ValueMappingService.getInstitutionDescription(value);  // 매핑 처리
                         } else if (header.equals("P_GENDER")) {
@@ -341,6 +344,40 @@ public class ExcelUploadService{
             return "190+";
         }
     }
+
+    private String getYearRange(String value) {
+        int year = Integer.parseInt(value);
+
+        if (year >= 1201 && year <= 1212) {
+            return "12년";
+        } else if (year >= 1301 && year <= 1312) {
+            return "13년";
+        } else if (year >= 1401 && year <= 1412) {
+            return "14년";
+        } else if (year >= 1501 && year <= 1512) {
+            return "15년";
+        } else if (year >= 1601 && year <= 1612) {
+            return "16년";
+        } else if (year >= 1701 && year <= 1712) {
+            return "17년";
+        } else if (year >= 1801 && year <= 1812) {
+            return "18년";
+        } else if (year >= 1901 && year <= 1912) {
+            return "19년";
+        } else if (year >= 2001 && year <= 2012) {
+            return "20년";
+        } else if (year >= 2101 && year <= 2112) {
+            return "21년";
+        } else if (year >= 2201 && year <= 2212) {
+            return "22년";
+        } else if (year >= 2301 && year <= 2312) {
+            return "23년";
+        } else {
+            return "Unknown Year";
+        }
+    }
+
+
 
 
 
