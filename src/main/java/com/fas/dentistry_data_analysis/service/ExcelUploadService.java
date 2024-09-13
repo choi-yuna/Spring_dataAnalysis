@@ -22,7 +22,7 @@ import java.util.concurrent.Future;
 
 @Slf4j
 @Service
-public class ExcelUploadService {
+public class ExcelUploadService{
 
     // 파일 ID와 파일 경로를 매핑하는 Map
     private final Map<String, Path> fileStorage = new HashMap<>();
@@ -100,7 +100,7 @@ public class ExcelUploadService {
         List<Map<String, String>> dataList = new ArrayList<>();
 
         try (InputStream inputStream = new FileInputStream(excelFile);
-             Workbook workbook = new SXSSFWorkbook(new XSSFWorkbook(inputStream), 100)) {
+             Workbook workbook = new XSSFWorkbook(inputStream)) {
 
             int numberOfSheets = workbook.getNumberOfSheets();
             List<Future<List<Map<String, String>>>> futureResults = new ArrayList<>();
@@ -132,6 +132,7 @@ public class ExcelUploadService {
         if (expectedHeaders != null) {
             Row headerRow = sheet.getRow(3); // 4번째 행을 헤더로 설정
             if (headerRow == null) {
+                log.error("헤더 행이 null입니다. 시트 이름: " + sheet.getSheetName() + ", 3번째 행 데이터를 확인해주세요.");
                 throw new RuntimeException("헤더 행이 존재하지 않습니다. 파일을 확인해주세요.");
             }
 
@@ -236,6 +237,16 @@ public class ExcelUploadService {
                             mappedValue = ValueMappingService.getInstitutionDescription(value);  // 매핑 처리
                         } else if (header.equals("P_GENDER")) {
                             mappedValue = ValueMappingService.getGenderDescription(value);  // 매핑 처리
+                        }else if (header.equals("LS_SMOKE")) {
+                                mappedValue = ValueMappingService.getSmokingDescription(value);
+                        } else if (header.equals("LS_ALCHOLE")) {
+                                mappedValue = ValueMappingService.getAlcoholDescription(value);
+                        } else if (header.equals("MH_DIABETES")) {
+                                mappedValue = ValueMappingService.getDiabetesDescription(value);
+                        } else if (header.equals("CARDIOVASCULAR_DISEASE")) {
+                                mappedValue = ValueMappingService.getCardiovascularDiseaseDescription(value);
+                        } else if (header.equals("IMAGE_SRC")) {
+                                mappedValue = ValueMappingService.getImageSourceDescription(value);
                         } else {
                             mappedValue = value;  // 매핑이 없는 경우 원래 값을 그대로 사용
                         }
@@ -299,7 +310,7 @@ public class ExcelUploadService {
 
     // 체중 필터링 구간 설정
     private String getWeightRange(String value) {
-        int weight = Integer.parseInt(value);
+        int weight = (int) Long.parseLong(value);
         if (weight < 40) {
             return "40 미만";
         } else if (weight >= 40 && weight <= 50) {
@@ -432,7 +443,6 @@ public class ExcelUploadService {
     }
 
 
-    // 나이 필터링 로직 (P_AGE)
     // 나이 필터링 로직 (P_AGE)
     private boolean matchesAgeCondition(String actualValue, String expectedSendValue) {
         if (actualValue == null || actualValue.trim().isEmpty()) {

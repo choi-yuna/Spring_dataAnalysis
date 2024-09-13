@@ -4,6 +4,7 @@ import com.fas.dentistry_data_analysis.DTO.AnalysisRequestDTO;
 import com.fas.dentistry_data_analysis.service.ExcelUploadService;
 import com.fas.dentistry_data_analysis.util.HeaderMappingService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +21,7 @@ public class ExcelUploadController {
 
     private final ExcelUploadService excelUploadService;
 
+    @Autowired
     public ExcelUploadController(ExcelUploadService excelUploadService) {
         this.excelUploadService = excelUploadService;
     }
