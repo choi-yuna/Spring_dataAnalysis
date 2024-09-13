@@ -96,85 +96,79 @@ public class ExcelUploadService{
     }
 
     // 엑셀 파일 처리 및 필터링 메소드
-    public List<Map<String, String>> processExcelFile(File excelFile, String diseaseClass, int institutionId) throws IOException, ExecutionException, InterruptedException {
+    public List<Map<String, String>> processExcelFile(File excelFile, String diseaseClass, int institutionId) throws IOException {
         List<Map<String, String>> dataList = new ArrayList<>();
 
         try (InputStream inputStream = new FileInputStream(excelFile);
              Workbook workbook = new XSSFWorkbook(inputStream)) {
 
             int numberOfSheets = workbook.getNumberOfSheets();
-            List<Future<List<Map<String, String>>>> futureResults = new ArrayList<>();
 
             for (int i = 0; i < numberOfSheets; i++) {
                 Sheet sheet = workbook.getSheetAt(i);
+                String sheetName = sheet.getSheetName().trim();
+                List<String> expectedHeaders = SheetHeaderMapping.getHeadersForSheet(sheetName);
 
-                // 각 시트를 병렬로 처리222222
-                Future<List<Map<String, String>>> future = executor.submit(() -> processSheet(sheet, diseaseClass, institutionId));
-                futureResults.add(future);
-            }
-
-            for (Future<List<Map<String, String>>> future : futureResults) {
-                dataList.addAll(future.get()); // 시트별 결과를 합침
-            }
-        } catch (Exception e) {
-            System.err.println("엑셀 파일 처리 중 오류 발생: " + e.getMessage());
-            throw e;
-        }
-        return dataList;
-    }
-
-    // 시트별 데이터를 처리하는 메소드
-    public List<Map<String, String>> processSheet(Sheet sheet, String diseaseClass, int institutionId) {
-        List<Map<String, String>> dataList = new ArrayList<>();
-        String sheetName = sheet.getSheetName().trim();
-        List<String> expectedHeaders = SheetHeaderMapping.getHeadersForSheet(sheetName);
-
-        if (expectedHeaders != null) {
-            Row headerRow = sheet.getRow(3); // 4번째 행을 헤더로 설정
-            if (headerRow == null) {
-                log.error("헤더 행이 null입니다. 시트 이름: " + sheet.getSheetName() + ", 3번째 행 데이터를 확인해주세요.");
-                throw new RuntimeException("헤더 행이 존재하지 않습니다. 파일을 확인해주세요.");
-            }
-
-            // 엑셀 파일의 헤더를 읽어옴
-            Map<String, Integer> headerIndexMap = new HashMap<>();
-            for (int cellIndex = 0; cellIndex < headerRow.getLastCellNum(); cellIndex++) {
-                Cell cell = headerRow.getCell(cellIndex);
-                if (cell != null) {
-                    String headerName = cell.getStringCellValue().trim();
-                    if (expectedHeaders.contains(headerName)) {
-                        headerIndexMap.put(headerName, cellIndex);
+                if (expectedHeaders != null) {  // 매핑된 헤더가 있는 경우에만 처리
+                    Row headerRow = sheet.getRow(3); // 4번째 행을 헤더로 설정
+                    if (headerRow == null) {
+                        throw new RuntimeException("헤더 행이 존재하지 않습니다. 파일을 확인해주세요.");
                     }
-                }
-            }
 
-            Integer diseaseClassIndex = headerIndexMap.get("DISEASE_CLASS");
-            Integer institutionIdIndex = headerIndexMap.get("INSTITUTION_ID");
-
-            if (diseaseClassIndex != null && institutionIdIndex != null) {
-                for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
-                    Row row = sheet.getRow(rowIndex);
-                    if (row != null) {
-                        String diseaseClassValue = getCellValueAsString(row.getCell(diseaseClassIndex));
-                        String institutionIdValueStr = getCellValueAsString(row.getCell(institutionIdIndex));
-
-                        if (!institutionIdValueStr.isEmpty() && diseaseClassValue.equals(diseaseClass)) {
-                            Map<String, String> rowData = new LinkedHashMap<>();
-                            for (String header : expectedHeaders) {
-                                Integer cellIndex = headerIndexMap.get(header);
-                                if (cellIndex != null) {
-                                    Cell cell = row.getCell(cellIndex);
-                                    String cellValue = (cell != null) ? getCellValueAsString(cell) : "";
-                                    rowData.put(header, cellValue);
-                                }
+                    // 엑셀 파일의 헤더를 읽어옴
+                    Map<String, Integer> headerIndexMap = new HashMap<>();
+                    for (int cellIndex = 0; cellIndex < headerRow.getLastCellNum(); cellIndex++) {
+                        Cell cell = headerRow.getCell(cellIndex);
+                        if (cell != null) {
+                            String headerName = cell.getStringCellValue().trim();
+                            if (expectedHeaders.contains(headerName)) {
+                                headerIndexMap.put(headerName, cellIndex);
                             }
-                            if (!rowData.isEmpty()) {
-                                dataList.add(rowData);
+                        }
+                    }
+
+                    Integer diseaseClassIndex = headerIndexMap.get("DISEASE_CLASS");
+                    Integer institutionIdIndex = headerIndexMap.get("INSTITUTION_ID");
+                    int institutionIdValue;
+
+                    if (diseaseClassIndex != null && institutionIdIndex != null) {
+                        for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) {  // 9번째 행부터 데이터 읽기
+                            Row row = sheet.getRow(rowIndex);
+                            if (row != null) {
+                                String diseaseClassValue = getCellValueAsString(row.getCell(diseaseClassIndex));
+                                String institutionIdValueStr = getCellValueAsString(row.getCell(institutionIdIndex));
+
+                                if (!institutionIdValueStr.isEmpty()) {
+                                    try {
+                                        institutionIdValue = Integer.parseInt(institutionIdValueStr);
+                                    } catch (NumberFormatException e) {
+                                        System.err.println("숫자로 변환할 수 없는 institutionId 값: " + institutionIdValueStr);
+                                        institutionIdValue = -1; // 잘못된 값은 -1로 설정
+                                    }
+
+                                    if (diseaseClassValue.equals(diseaseClass) && institutionIdValue == institutionId) {
+                                        Map<String, String> rowData = new LinkedHashMap<>();
+                                        for (String header : expectedHeaders) {
+                                            Integer cellIndex = headerIndexMap.get(header);
+                                            if (cellIndex != null) {
+                                                Cell cell = row.getCell(cellIndex);
+                                                String cellValue = (cell != null) ? getCellValueAsString(cell) : "";
+                                                rowData.put(header, cellValue);
+                                            }
+                                        }
+                                        if (!rowData.isEmpty()) {
+                                            dataList.add(rowData);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
+        } catch (Exception e) {
+            System.err.println("엑셀 파일 처리 중 오류 발생: " + e.getMessage());
+            throw e;
         }
         return dataList;
     }
@@ -238,15 +232,15 @@ public class ExcelUploadService{
                         } else if (header.equals("P_GENDER")) {
                             mappedValue = ValueMappingService.getGenderDescription(value);  // 매핑 처리
                         }else if (header.equals("LS_SMOKE")) {
-                                mappedValue = ValueMappingService.getSmokingDescription(value);
+                            mappedValue = ValueMappingService.getSmokingDescription(value);
                         } else if (header.equals("LS_ALCHOLE")) {
-                                mappedValue = ValueMappingService.getAlcoholDescription(value);
+                            mappedValue = ValueMappingService.getAlcoholDescription(value);
                         } else if (header.equals("MH_DIABETES")) {
-                                mappedValue = ValueMappingService.getDiabetesDescription(value);
+                            mappedValue = ValueMappingService.getDiabetesDescription(value);
                         } else if (header.equals("CARDIOVASCULAR_DISEASE")) {
-                                mappedValue = ValueMappingService.getCardiovascularDiseaseDescription(value);
+                            mappedValue = ValueMappingService.getCardiovascularDiseaseDescription(value);
                         } else if (header.equals("IMAGE_SRC")) {
-                                mappedValue = ValueMappingService.getImageSourceDescription(value);
+                            mappedValue = ValueMappingService.getImageSourceDescription(value);
                         } else {
                             mappedValue = value;  // 매핑이 없는 경우 원래 값을 그대로 사용
                         }
