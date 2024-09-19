@@ -38,6 +38,7 @@ public class ValueMappingService {
         put("DI_LOC", ValueMappingService::getLesionLocationDescription);
         put("MH_HIGHBLOOD",ValueMappingService::getCommonOXDescription);
         put("MH_OSTEOPROSIS",ValueMappingService::getCommonOXDescription);
+        put("ORIGIN_INF",ValueMappingService::getCommonOXDescription);
     }};
 
     // 기관 ID 매핑
@@ -195,6 +196,7 @@ public class ValueMappingService {
         put("8", "Sinus");
         put("9", "Tonsil");
     }};
+
 
     private static String getAgeRange(String value) {
         int age = Integer.parseInt(value);

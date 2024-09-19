@@ -98,8 +98,7 @@ public class ExcelUploadService{
         List<Map<String, String>> dataList = new ArrayList<>();
 
         try (InputStream inputStream = new FileInputStream(excelFile);
-             Workbook workbook = new SXSSFWorkbook(new XSSFWorkbook(inputStream))) {  // SXSSFWorkbook 사용 (XSSFWorkbook 스트리밍 모드)
-
+             Workbook workbook = new XSSFWorkbook(inputStream)) {  // SXSSFWorkbook 사용 (XSSFWorkbook 스트리밍 모드)
 
             int numberOfSheets = workbook.getNumberOfSheets();
 
