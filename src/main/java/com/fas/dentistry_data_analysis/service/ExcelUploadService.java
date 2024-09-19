@@ -175,6 +175,7 @@ public class ExcelUploadService{
 
 
     // 동적 필터링을 위한 메소드 추가
+    // 동적 필터링을 위한 메소드
     public List<Map<String, Object>> analyzeDataWithFilters(String[] fileIds, Map<String, String> filterConditions, List<String> headers) throws IOException {
         if (fileIds == null || fileIds.length == 0) {
             throw new IllegalArgumentException("파일 ID 목록이 비어있거나 null입니다.");
@@ -185,7 +186,6 @@ public class ExcelUploadService{
         for (String header : headers) {
             Map<String, Object> result = new HashMap<>();
 
-            // 제목과 헤더 결정
             String title = HeaderMappingService.determineTitleBasedOnHeaders(Arrays.asList(header));
             List<String> dynamicHeaders = HeaderMappingService.determineHeadersBasedOnFilters(Arrays.asList(header));
 
@@ -215,37 +215,11 @@ public class ExcelUploadService{
                     String value = rowData.getOrDefault(header, "").trim();
 
                     if (!value.isEmpty()) {
-                        String mappedValue = "";
+                        String mappedValue = value; // 기본적으로 원래 값을 사용
 
-                        // 특정 헤더에 대해서만 구간별로 처리
-                        if (header.equals("P_AGE")) {
-                            value = getAgeRange(value);  // 구간 처리
-                            mappedValue = value; // 구간 처리를 바로 매핑된 값으로 사용
-                        } else if (header.equals("P_WEIGHT")) {
-                            value = getWeightRange(value);  // 구간 처리
-                            mappedValue = value;
-                        } else if (header.equals("P_HEIGHT")) {
-                            value = getHeightRange(value);  // 구간 처리
-                            mappedValue = value;
-                        } else if (header.equals("CAPTURE_TIME")) {
-                            value = getYearRange(value);  // 구간 처리
-                            mappedValue = value;
-                        } else if (header.equals("INSTITUTION_ID")) {
-                            mappedValue = ValueMappingService.getInstitutionDescription(value);  // 매핑 처리
-                        } else if (header.equals("P_GENDER")) {
-                            mappedValue = ValueMappingService.getGenderDescription(value);  // 매핑 처리
-                        }else if (header.equals("LS_SMOKE")) {
-                            mappedValue = ValueMappingService.getSmokingDescription(value);
-                        } else if (header.equals("LS_ALCHOLE")) {
-                            mappedValue = ValueMappingService.getAlcoholDescription(value);
-                        } else if (header.equals("MH_DIABETES")) {
-                            mappedValue = ValueMappingService.getDiabetesDescription(value);
-                        } else if (header.equals("CARDIOVASCULAR_DISEASE")) {
-                            mappedValue = ValueMappingService.getCardiovascularDiseaseDescription(value);
-                        } else if (header.equals("IMAGE_SRC")) {
-                            mappedValue = ValueMappingService.getImageSourceDescription(value);
-                        } else {
-                            mappedValue = value;  // 매핑이 없는 경우 원래 값을 그대로 사용
+                        // headerMappingFunctions에 해당 헤더가 있으면 그 함수로 매핑
+                        if (ValueMappingService.headerMappingFunctions.containsKey(header)) {
+                            mappedValue = ValueMappingService.headerMappingFunctions.get(header).apply(value);
                         }
 
                         // 해당 값이 rows에 이미 있는지 확인
@@ -278,104 +252,6 @@ public class ExcelUploadService{
         return responseList;  // 제목, 헤더, 빈도수를 포함한 결과 반환
     }
 
-
-    // 나이 필터링 구간 설정
-    private String getAgeRange(String value) {
-        int age = Integer.parseInt(value);
-        if (age < 10) {
-            return "0-9";
-        } else if (age >= 10 && age <= 20) {
-            return "10-20";
-        } else if (age >= 21 && age <= 30) {
-            return "21-30";
-        } else if (age >= 31 && age <= 40) {
-            return "31-40";
-        } else if (age >= 41 && age <= 50) {
-            return "41-50";
-        } else if (age >= 51 && age <= 60) {
-            return "51-60";
-        } else if (age >= 61 && age <= 70) {
-            return "61-70";
-        } else if (age >= 71 && age <= 80) {
-            return "71-80";
-        } else if (age >= 81 && age <= 90) {
-            return "81-90";
-        } else {
-            return "90+";
-        }
-    }
-
-    // 체중 필터링 구간 설정
-    private String getWeightRange(String value) {
-        int weight = (int) Long.parseLong(value);
-        if (weight < 40) {
-            return "40 미만";
-        } else if (weight >= 40 && weight <= 50) {
-            return "40-50";
-        } else if (weight >= 51 && weight <= 60) {
-            return "51-60";
-        } else if (weight >= 61 && weight <= 70) {
-            return "61-70";
-        } else if (weight >= 71 && weight <= 80) {
-            return "71-80";
-        } else if (weight >= 81 && weight <= 90) {
-            return "81-90";
-        } else {
-            return "91+";
-        }
-    }
-
-    // 키 필터링 구간 설정
-    private String getHeightRange(String value) {
-        int height = Integer.parseInt(value);
-        if (height < 140) {
-            return "140 미만";
-        } else if (height >= 140 && height <= 150) {
-            return "140-150";
-        } else if (height >= 151 && height <= 160) {
-            return "151-160";
-        } else if (height >= 161 && height <= 170) {
-            return "161-170";
-        } else if (height >= 171 && height <= 180) {
-            return "171-180";
-        } else if (height >= 181 && height <= 190) {
-            return "181-190";
-        } else {
-            return "190+";
-        }
-    }
-
-    private String getYearRange(String value) {
-        int year = Integer.parseInt(value);
-
-        if (year >= 1201 && year <= 1212) {
-            return "12년";
-        } else if (year >= 1301 && year <= 1312) {
-            return "13년";
-        } else if (year >= 1401 && year <= 1412) {
-            return "14년";
-        } else if (year >= 1501 && year <= 1512) {
-            return "15년";
-        } else if (year >= 1601 && year <= 1612) {
-            return "16년";
-        } else if (year >= 1701 && year <= 1712) {
-            return "17년";
-        } else if (year >= 1801 && year <= 1812) {
-            return "18년";
-        } else if (year >= 1901 && year <= 1912) {
-            return "19년";
-        } else if (year >= 2001 && year <= 2012) {
-            return "20년";
-        } else if (year >= 2101 && year <= 2112) {
-            return "21년";
-        } else if (year >= 2201 && year <= 2212) {
-            return "22년";
-        } else if (year >= 2301 && year <= 2312) {
-            return "23년";
-        } else {
-            return "Unknown Year";
-        }
-    }
 
 
 
