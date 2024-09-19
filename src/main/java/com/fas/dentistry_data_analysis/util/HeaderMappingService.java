@@ -49,9 +49,11 @@ public class HeaderMappingService {
         headerMapping.put("DI_NAME", Arrays.asList("진단명", "환자수"));
         headerMapping.put("DI_LOC", Arrays.asList("병소부위", "환자수"));
         headerMapping.put("PT_TNM", Arrays.asList("TNM stage", "환자수"));
+        headerMapping.put("MAKER_INFO", Arrays.asList("촬영 장비","환자수"));
 
         // title과 대응하는 값들을 미리 Map에 매핑
         titleMapping = new HashMap<>();
+        titleMapping.put("MAKER_INFO", " 촬영장비 데이터");
         titleMapping.put("INSTITUTION_ID", "기관별 데이터");
         titleMapping.put("P_AGE", "나이별 데이터");
         titleMapping.put("P_WEIGHT", "체중별 데이터");

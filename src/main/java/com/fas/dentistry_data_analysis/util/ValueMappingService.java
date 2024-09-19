@@ -36,6 +36,8 @@ public class ValueMappingService {
         put("DI_DETAIL", ValueMappingService::getDiagnosisDetailDescription);
         put("DI_NAME", ValueMappingService::getDiagnosisNameDescription);
         put("DI_LOC", ValueMappingService::getLesionLocationDescription);
+        put("MH_HIGHBLOOD",ValueMappingService::getCommonOXDescription);
+        put("MH_OSTEOPROSIS",ValueMappingService::getCommonOXDescription);
     }};
 
     // 기관 ID 매핑
