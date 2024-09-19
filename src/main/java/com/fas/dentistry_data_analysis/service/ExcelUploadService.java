@@ -15,17 +15,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
+import java.util.function.Function;
 
 @Slf4j
 @Service
 public class ExcelUploadService{
 
     // 파일 ID와 파일 경로를 매핑하는 Map
-    private final Map<String, Path> fileStorage = new HashMap<>();
+    private final Map<String, Path> fileStorage = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 
 
@@ -100,7 +98,8 @@ public class ExcelUploadService{
         List<Map<String, String>> dataList = new ArrayList<>();
 
         try (InputStream inputStream = new FileInputStream(excelFile);
-             Workbook workbook = new XSSFWorkbook(inputStream)) {
+             Workbook workbook = new SXSSFWorkbook(new XSSFWorkbook(inputStream))) {  // SXSSFWorkbook 사용 (XSSFWorkbook 스트리밍 모드)
+
 
             int numberOfSheets = workbook.getNumberOfSheets();
 
@@ -173,8 +172,6 @@ public class ExcelUploadService{
         return dataList;
     }
 
-
-    // 동적 필터링을 위한 메소드 추가
     // 동적 필터링을 위한 메소드
     public List<Map<String, Object>> analyzeDataWithFilters(String[] fileIds, Map<String, String> filterConditions, List<String> headers) throws IOException {
         if (fileIds == null || fileIds.length == 0) {
@@ -182,80 +179,82 @@ public class ExcelUploadService{
         }
 
         List<Map<String, Object>> responseList = new ArrayList<>();
+        ExecutorService executor = Executors.newFixedThreadPool(4); // 스레드풀 생성
 
-        for (String header : headers) {
-            Map<String, Object> result = new HashMap<>();
-
-            String title = HeaderMappingService.determineTitleBasedOnHeaders(Arrays.asList(header));
-            List<String> dynamicHeaders = HeaderMappingService.determineHeadersBasedOnFilters(Arrays.asList(header));
-
-            result.put("id", header);  // 예: institution_ID, age_ID
-            result.put("title", title);
-            result.put("headers", dynamicHeaders);
-
-            // 빈도수 저장을 위한 Map
-            List<Map<String, Object>> rows = new ArrayList<>();
-
+        try {
+            // 비동기 파일 처리
+            List<Future<List<Map<String, String>>>> futures = new ArrayList<>();
             for (String fileId : fileIds) {
-                Path filePath = fileStorage.get(fileId);
-                if (filePath == null) {
-                    throw new IOException("파일을 찾을 수 없습니다. 파일 ID: " + fileId);
-                }
+                futures.add(executor.submit(() -> {
+                    Path filePath = fileStorage.get(fileId);
+                    if (filePath == null) {
+                        throw new IOException("파일을 찾을 수 없습니다. 파일 ID: " + fileId);
+                    }
+                    Map<String, String> fileFilterConditions = new HashMap<>(filterConditions);
+                    if ("All".equals(fileFilterConditions.get("DISEASE_CLASS"))) {
+                        fileFilterConditions.remove("DISEASE_CLASS");
+                    }
+                    return processFileWithFilters(new File(filePath.toString()), fileFilterConditions, headers);
+                }));
+            }
+            // 결과 처리
+            for (String header : headers) {
+                Map<String, Object> result = new HashMap<>();
+                String title = HeaderMappingService.determineTitleBasedOnHeaders(Arrays.asList(header));
+                List<String> dynamicHeaders = HeaderMappingService.determineHeadersBasedOnFilters(Arrays.asList(header));
+                result.put("id", header);
+                result.put("title", title);
+                result.put("headers", dynamicHeaders);
 
-                // "All" 처리: DISEASE_CLASS 값이 있는 데이터만 추출
-                if (filterConditions.containsKey("DISEASE_CLASS") && filterConditions.get("DISEASE_CLASS").equals("All")) {
-                    filterConditions.remove("DISEASE_CLASS");
-                }
+                // 빈도수 계산
+                Map<String, Integer> valueCounts = new HashMap<>();
 
-                // 필터링된 데이터를 가져옴
-                List<Map<String, String>> fileData = processFileWithFilters(new File(filePath.toString()), filterConditions, Arrays.asList(header));
-
-                // 각 헤더 값에 대한 빈도수 계산 및 구조화
-                for (Map<String, String> rowData : fileData) {
-                    String value = rowData.getOrDefault(header, "").trim();
-
-                    if (!value.isEmpty()) {
-                        String mappedValue = value; // 기본적으로 원래 값을 사용
-
-                        // headerMappingFunctions에 해당 헤더가 있으면 그 함수로 매핑
-                        if (ValueMappingService.headerMappingFunctions.containsKey(header)) {
-                            mappedValue = ValueMappingService.headerMappingFunctions.get(header).apply(value);
-                        }
-
-                        // 해당 값이 rows에 이미 있는지 확인
-                        String finalValue = mappedValue;  // 매핑된 값을 최종 값으로 사용
-                        Optional<Map<String, Object>> existingEntry = rows.stream()
-                                .filter(entry -> entry.get("value").equals(finalValue))
-                                .findFirst();
-
-                        if (existingEntry.isPresent()) {
-                            // 이미 존재하는 값이면 count 증가
-                            Map<String, Object> entry = existingEntry.get();
-                            int currentCount = (int) entry.get("count");
-                            entry.put("count", currentCount + 1);
-                        } else {
-                            // 새로운 값이면 rows에 추가
-                            Map<String, Object> newValueCountMap = new LinkedHashMap<>();
-                            newValueCountMap.put("value", finalValue);  // 매핑된 값 저장
-                            newValueCountMap.put("count", 1);
-                            rows.add(newValueCountMap);
-                        }
+                for (Future<List<Map<String, String>>> future : futures) {
+                    List<Map<String, String>> fileData;
+                    try {
+                        fileData = future.get();
+                    } catch (Exception e) {
+                        throw new IOException("파일 처리 중 오류 발생", e);
                     }
 
-                }
-            }
+                    for (Map<String, String> rowData : fileData) {
+                        String value = rowData.getOrDefault(header, "").trim();
 
-            result.put("rows", rows);
-            responseList.add(result);  // 최종 결과 리스트에 추가
+                            // "All"이 아닌 경우 필터 적용
+                            if (filterConditions.containsKey(header)) {
+                                String filterValue = filterConditions.get(header);
+                                if (!filterValue.equals(value)) {
+                                    continue; // 필터 조건과 일치하지 않으면 건너뜀
+                                }
+                            }
+
+                        if (!value.isEmpty()) {
+                            String mappedValue = ValueMappingService.headerMappingFunctions
+                                    .getOrDefault(header, Function.identity())
+                                    .apply(value);
+                            valueCounts.put(mappedValue, valueCounts.getOrDefault(mappedValue, 0) + 1);
+                        }
+                    }
+                }
+
+                // 빈도수를 rows 리스트로 변환
+                List<Map<String, Object>> rows = new ArrayList<>();
+                for (Map.Entry<String, Integer> entry : valueCounts.entrySet()) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("value", entry.getKey());
+                    row.put("count", entry.getValue());
+                    rows.add(row);
+                }
+
+                result.put("rows", rows);
+                responseList.add(result);
+            }
+        } finally {
+            executor.shutdown();
         }
 
-        return responseList;  // 제목, 헤더, 빈도수를 포함한 결과 반환
+        return responseList;
     }
-
-
-
-
-
 
 
     // 동적 필터링을 처리하는 메소드 (기존)
