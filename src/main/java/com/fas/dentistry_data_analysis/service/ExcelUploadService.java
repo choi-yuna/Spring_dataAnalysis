@@ -220,18 +220,21 @@ public class ExcelUploadService{
                     for (Map<String, String> rowData : fileData) {
                         String value = rowData.getOrDefault(header, "").trim();
 
-                            // "All"이 아닌 경우 필터 적용
-                            if (filterConditions.containsKey(header)) {
-                                String filterValue = filterConditions.get(header);
-                                if (!filterValue.equals(value)) {
-                                    continue; // 필터 조건과 일치하지 않으면 건너뜀
-                                }
+                        // 필터 조건을 확인하되 필터링 실패해도 매핑을 시도
+                        if (filterConditions.containsKey(header)) {
+                            String filterValue = filterConditions.get(header);
+
+                            // 필터 조건을 만족하지 않으면 매핑만 수행 (필터된 데이터를 따로 기록하고 싶다면 로직 추가)
+                            if (!filterValue.equals(value)) {
+                                // 여기서 필터 조건을 만족하지 않는 데이터를 처리하고 싶으면 별도 로직 추가 가능
                             }
+                        }
 
                         if (!value.isEmpty()) {
                             String mappedValue = ValueMappingService.headerMappingFunctions
                                     .getOrDefault(header, Function.identity())
                                     .apply(value);
+
                             valueCounts.put(mappedValue, valueCounts.getOrDefault(mappedValue, 0) + 1);
                         }
                     }
@@ -249,6 +252,7 @@ public class ExcelUploadService{
                 result.put("rows", rows);
                 responseList.add(result);
             }
+
         } finally {
             executor.shutdown();
         }
@@ -337,7 +341,12 @@ public class ExcelUploadService{
                     if (!matchesHeightCondition(cellValue, expectedValue)) {
                         return false;
                     }
-                } else {
+                } else if (header.equals("CAPTURE_TIME")) {
+                    if(!matchesYearRangeCondition(cellValue, expectedValue)) {
+                        return false;
+                    }
+                }
+                else {
                     // 기본 문자열 비교
                     if (!cellValue.equals(expectedValue)) {
                         return false;
@@ -357,13 +366,16 @@ public class ExcelUploadService{
 
         int age = Integer.parseInt(actualValue);
         switch (expectedSendValue) {
-            case "0": return age < 40;
-            case "1": return age >= 40 && age <= 50;
-            case "2": return age >= 51 && age <= 60;
-            case "3": return age >= 61 && age <= 70;
-            case "4": return age >= 71 && age <= 80;
-            case "5": return age >= 81 && age <= 90;
-            case "6": return age > 90;
+            case "0": return age < 10;
+            case "1": return age >= 10 && age <= 20;
+            case "2": return age >= 21 && age <= 30;
+            case "3": return age >= 31 && age <= 40;
+            case "4": return age >= 41 && age <= 50;
+            case "5": return age >= 51 && age <= 60;
+            case "6": return age >= 61 && age <= 70;
+            case "7": return age >= 71 && age <= 80;
+            case "8": return age >= 81 && age <= 90;
+            case "9": return age > 90;
             default: return false;
         }
     }
@@ -375,20 +387,17 @@ public class ExcelUploadService{
         }
 
         int weight = Integer.parseInt(actualValue);
-        switch (expectedSendValue) {
-            case "0": return weight < 10;
-            case "1": return weight >= 10 && weight <= 20;
-            case "2": return weight >= 21 && weight <= 30;
-            case "3": return weight >= 31 && weight <= 40;
-            case "4": return weight >= 41 && weight <= 50;
-            case "5": return weight >= 51 && weight <= 60;
-            case "6": return weight >= 61 && weight <= 70;
-            case "7": return weight >= 71 && weight <= 80;
-            case "8": return weight >= 81 && weight <= 90;
-            case "9": return weight > 90;
-            default: return false;
+            switch (expectedSendValue) {
+                case "0": return weight < 40;
+                case "1": return weight >= 40 && weight <= 50;
+                case "2": return weight >= 51 && weight <= 60;
+                case "3": return weight >= 61 && weight <= 70;
+                case "4": return weight >= 71 && weight <= 80;
+                case "5": return weight >= 81 && weight <= 90;
+                case "6": return weight > 90;
+                default: return false;
+            }
         }
-    }
 
     // 키 필터링 로직 (P_HEIGHT)
     private boolean matchesHeightCondition(String actualValue, String expectedSendValue) {
@@ -408,6 +417,32 @@ public class ExcelUploadService{
             default: return false;
         }
     }
+
+    private boolean matchesYearRangeCondition(String actualValue, String expectedSendValue) {
+        if (actualValue == null || actualValue.trim().isEmpty()) {
+            return false;  // 값이 비어있으면 false를 반환
+        }
+
+        int year = Integer.parseInt(actualValue);
+
+        switch (expectedSendValue) {
+            case "12": return year >= 1201 && year <= 1212;
+            case "13": return year >= 1301 && year <= 1312;
+            case "14": return year >= 1401 && year <= 1412;
+            case "15": return year >= 1501 && year <= 1512;
+            case "16": return year >= 1601 && year <= 1612;
+            case "17": return year >= 1701 && year <= 1712;
+            case "18": return year >= 1801 && year <= 1812;
+            case "19": return year >= 1901 && year <= 1912;
+            case "20": return year >= 2001 && year <= 2012;
+            case "21": return year >= 2101 && year <= 2112;
+            case "22": return year >= 2201 && year <= 2212;
+            case "23": return year >= 2301 && year <= 2312;
+            default: return false;
+        }
+    }
+
+
 
 
 
