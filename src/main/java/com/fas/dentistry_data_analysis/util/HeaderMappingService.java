@@ -52,6 +52,9 @@ public class HeaderMappingService {
         headerMapping.put("MAKER_INFO", Arrays.asList("촬영 장비","환자수"));
         headerMapping.put("IMAGE_SRC", Arrays.asList("촬영 종류","환자수"));
         headerMapping.put("P_RES_AREA", Arrays.asList("주거지역","환자수"));
+        headerMapping.put("CAN_NUM", Arrays.asList("구강암 개수","환자수"));
+        headerMapping.put("LYM_NUM", Arrays.asList("임파절 전이 개수","환자수"));
+        headerMapping.put("OST_NUM", Arrays.asList("골수염 개수","환자수"));
 
         // title과 대응하는 값들을 미리 Map에 매핑
         titleMapping = new HashMap<>();
@@ -93,6 +96,9 @@ public class HeaderMappingService {
         titleMapping.put("PT_TNM", "TNM stage 데이터");
         titleMapping.put("IMAGE_SRC", "촬영종류 데이터");
         titleMapping.put("P_RES_AREA", "주거지역 데이터");
+        titleMapping.put("CAN_NUM", "구강암 개수 데이터");
+        titleMapping.put("LYM_NUM", "임파절 전이 개수 데이터");
+        titleMapping.put("OST_NUM", "골수염 개수 데이터");
     }
 
     // Map을 활용하여 동적으로 헤더를 가져오는 메소드

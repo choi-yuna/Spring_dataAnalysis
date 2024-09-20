@@ -196,60 +196,124 @@ public class ExcelUploadService{
                     return processFileWithFilters(new File(filePath.toString()), fileFilterConditions, headers);
                 }));
             }
+
             // 결과 처리
             for (String header : headers) {
-                Map<String, Object> result = new HashMap<>();
-                String title = HeaderMappingService.determineTitleBasedOnHeaders(Arrays.asList(header));
-                List<String> dynamicHeaders = HeaderMappingService.determineHeadersBasedOnFilters(Arrays.asList(header));
-                result.put("id", header);
-                result.put("title", title);
-                result.put("headers", dynamicHeaders);
+                if ("Tooth".equals(header)) {
+                    // Tooth 헤더가 들어오면 모든 Tooth_로 시작하는 헤더들을 요약 처리
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("headers", Arrays.asList("치아 상태", "개수"));
+                    result.put("id", "Tooth");
+                    result.put("title", "치아 상태 요약");
 
-                // 빈도수 계산
-                Map<String, Integer> valueCounts = new HashMap<>();
+                    // 빈도수 계산 (임플란트, 보철 등)
+                    int implantCount = 0;
+                    int prosthesisCount = 0;
+                    int normalCount = 0;
+                    int bridgeCount = 0;
+                    int otherCount = 0;
 
-                for (Future<List<Map<String, String>>> future : futures) {
-                    List<Map<String, String>> fileData;
-                    try {
-                        fileData = future.get();
-                    } catch (Exception e) {
-                        throw new IOException("파일 처리 중 오류 발생", e);
-                    }
+                    for (Future<List<Map<String, String>>> future : futures) {
+                        List<Map<String, String>> fileData;
+                        try {
+                            fileData = future.get();
+                        } catch (Exception e) {
+                            throw new IOException("파일 처리 중 오류 발생", e);
+                        }
 
-                    for (Map<String, String> rowData : fileData) {
-                        String value = rowData.getOrDefault(header, "").trim();
+                        for (Map<String, String> rowData : fileData) {
+                            for (Map.Entry<String, String> entry : rowData.entrySet()) {
+                                String key = entry.getKey();
+                                String value = entry.getValue().trim();
 
-                        // 필터 조건을 확인하되 필터링 실패해도 매핑을 시도
-                        if (filterConditions.containsKey(header)) {
-                            String filterValue = filterConditions.get(header);
-
-                            // 필터 조건을 만족하지 않으면 매핑만 수행 (필터된 데이터를 따로 기록하고 싶다면 로직 추가)
-                            if (!filterValue.equals(value)) {
-                                // 여기서 필터 조건을 만족하지 않는 데이터를 처리하고 싶으면 별도 로직 추가 가능
+                                // Tooth_로 시작하는 헤더만 처리
+                                if (key.startsWith("Tooth_")) {
+                                    switch (value) {
+                                        case "1":  // 정상
+                                            normalCount++;
+                                            break;
+                                        case "2":  // 보철
+                                            prosthesisCount++;
+                                            break;
+                                        case "3":  // 임플란트
+                                            implantCount++;
+                                            break;
+                                        case "4":  // 브릿지
+                                            bridgeCount++;
+                                            break;
+                                        case "5":  // 기타
+                                        case "6":  // 기타
+                                            otherCount++;
+                                            break;
+                                    }
+                                }
                             }
                         }
+                    }
 
-                        if (!value.isEmpty()) {
-                            String mappedValue = ValueMappingService.headerMappingFunctions
-                                    .getOrDefault(header, Function.identity())
-                                    .apply(value);
+                    // 결과 저장
+                    List<Map<String, Object>> rows = new ArrayList<>();
+                    rows.add(Map.of("value", "정상", "count", normalCount));
+                    rows.add(Map.of("value", "보철", "count", prosthesisCount));
+                    rows.add(Map.of("value", "임플란트", "count", implantCount));
+                    rows.add(Map.of("value", "브릿지", "count", bridgeCount));
+                    rows.add(Map.of("value", "기타", "count", otherCount));
 
-                            valueCounts.put(mappedValue, valueCounts.getOrDefault(mappedValue, 0) + 1);
+                    result.put("rows", rows);
+                    responseList.add(result);
+
+                } else {
+                    // 일반적인 헤더 처리
+                    Map<String, Object> result = new HashMap<>();
+                    String title = HeaderMappingService.determineTitleBasedOnHeaders(Arrays.asList(header));
+                    List<String> dynamicHeaders = HeaderMappingService.determineHeadersBasedOnFilters(Arrays.asList(header));
+                    result.put("id", header);
+                    result.put("title", title);
+                    result.put("headers", dynamicHeaders);
+
+                    // 빈도수 계산
+                    Map<String, Integer> valueCounts = new HashMap<>();
+
+                    for (Future<List<Map<String, String>>> future : futures) {
+                        List<Map<String, String>> fileData;
+                        try {
+                            fileData = future.get();
+                        } catch (Exception e) {
+                            throw new IOException("파일 처리 중 오류 발생", e);
+                        }
+
+                        for (Map<String, String> rowData : fileData) {
+                            String value = rowData.getOrDefault(header, "").trim();
+
+                            // 필터 조건을 확인하되 필터링 실패해도 매핑을 시도
+                            if (filterConditions.containsKey(header)) {
+                                String filterValue = filterConditions.get(header);
+                                if (!filterValue.equals(value)) {
+                                    continue; // 필터 조건에 맞지 않으면 처리하지 않음
+                                }
+                            }
+
+                            if (!value.isEmpty()) {
+                                String mappedValue = ValueMappingService.headerMappingFunctions
+                                        .getOrDefault(header, Function.identity())
+                                        .apply(value);
+                                valueCounts.put(mappedValue, valueCounts.getOrDefault(mappedValue, 0) + 1);
+                            }
                         }
                     }
-                }
 
-                // 빈도수를 rows 리스트로 변환
-                List<Map<String, Object>> rows = new ArrayList<>();
-                for (Map.Entry<String, Integer> entry : valueCounts.entrySet()) {
-                    Map<String, Object> row = new LinkedHashMap<>();
-                    row.put("value", entry.getKey());
-                    row.put("count", entry.getValue());
-                    rows.add(row);
-                }
+                    // 빈도수를 rows 리스트로 변환
+                    List<Map<String, Object>> rows = new ArrayList<>();
+                    for (Map.Entry<String, Integer> entry : valueCounts.entrySet()) {
+                        Map<String, Object> row = new LinkedHashMap<>();
+                        row.put("value", entry.getKey());
+                        row.put("count", entry.getValue());
+                        rows.add(row);
+                    }
 
-                result.put("rows", rows);
-                responseList.add(result);
+                    result.put("rows", rows);
+                    responseList.add(result);
+                }
             }
 
         } finally {
@@ -258,6 +322,7 @@ public class ExcelUploadService{
 
         return responseList;
     }
+
 
 
     // 동적 필터링을 처리하는 메소드 (기존)
@@ -287,8 +352,7 @@ public class ExcelUploadService{
                     Cell cell = headerRow.getCell(cellIndex);
                     if (cell != null) {
                         String headerName = cell.getStringCellValue().trim();
-                        // 요청된 헤더에 포함된 것만 매핑
-                        headerIndexMap.put(headerName, cellIndex);
+                        headerIndexMap.put(headerName, cellIndex);  // 모든 헤더 저장
                     }
                 }
 
@@ -297,15 +361,33 @@ public class ExcelUploadService{
                     Row row = sheet.getRow(rowIndex);
                     if (row != null && matchesConditions(row, headerIndexMap, filterConditions)) {
                         Map<String, String> rowData = new LinkedHashMap<>();
-                        // 필터링된 데이터에서 헤더에 맞는 값만 추출
-                        for (String header : headers) {
-                            Integer cellIndex = headerIndexMap.get(header);
-                            if (cellIndex != null) {
-                                Cell cell = row.getCell(cellIndex);
-                                String cellValue = (cell != null) ? getCellValueAsString(cell) : "";
-                                rowData.put(header, cellValue);
+
+                        // Tooth 관련 필드 확인
+                        if (headers.contains("Tooth")) {
+                            // Tooth_로 시작하는 모든 헤더에 대해 값을 가져옴
+                            for (Map.Entry<String, Integer> entry : headerIndexMap.entrySet()) {
+                                String headerName = entry.getKey();
+                                if (headerName.startsWith("Tooth_")) {
+                                    Integer cellIndex = entry.getValue();
+                                    Cell cell = row.getCell(cellIndex);
+                                    String cellValue = (cell != null) ? getCellValueAsString(cell).trim() : "";
+                                    rowData.put(headerName, cellValue);
+                                }
                             }
                         }
+
+                        // 일반 헤더 처리
+                        for (String header : headers) {
+                            if (!header.equals("Tooth")) {
+                                Integer cellIndex = headerIndexMap.get(header);
+                                if (cellIndex != null) {
+                                    Cell cell = row.getCell(cellIndex);
+                                    String cellValue = (cell != null) ? getCellValueAsString(cell) : "";
+                                    rowData.put(header, cellValue);
+                                }
+                            }
+                        }
+
                         if (!rowData.isEmpty()) {
                             filteredData.add(rowData);
                         }
@@ -422,7 +504,13 @@ public class ExcelUploadService{
             return false;  // 값이 비어있으면 false를 반환
         }
 
-        int year = Integer.parseInt(actualValue);
+        int year;
+        try {
+            year = Integer.parseInt(actualValue);
+        } catch (NumberFormatException e) {
+            return false;
+        }
+
 
         switch (expectedSendValue) {
             case "12": return year >= 1201 && year <= 1212;

@@ -52,6 +52,21 @@ public class ValueMappingService {
         put("7", "보라매병원");
     }};
 
+    // Tooth 상태 매핑
+    private static final Map<String, String> toothStateMap = new HashMap<>() {{
+        put("1", "정상");
+        put("2", "보철");
+        put("3", "임플란트");
+        put("4", "브릿지");
+        put("5", "기타");
+    }};
+
+    // Tooth 상태를 반환하는 메소드
+    public static String getToothStateDescription(String value) {
+        return toothStateMap.getOrDefault(value, "Unknown 상태");
+    }
+
+
     // 성별 매핑
     private static final Map<String, String> genderMap = new HashMap<>() {{
         put("1", "남자");
@@ -264,7 +279,12 @@ public class ValueMappingService {
     }
 
     private static String getYearRange(String value) {
-        int year = Integer.parseInt(value);
+        int year;
+        try {
+            year = Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return "Unknown Year"; // 기본값 또는 예외 처리
+        }
 
         if (year >= 1201 && year <= 1212) {
             return "12년";
@@ -294,6 +314,7 @@ public class ValueMappingService {
             return "Unknown Year";
         }
     }
+
 
 
 
