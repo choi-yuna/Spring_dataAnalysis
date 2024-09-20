@@ -5,7 +5,6 @@ import com.fas.dentistry_data_analysis.util.HeaderMappingService;
 import com.fas.dentistry_data_analysis.util.ValueMappingService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -96,9 +95,12 @@ public class ExcelUploadService{
     // 엑셀 파일 처리 및 필터링 메소드
     public List<Map<String, String>> processExcelFile(File excelFile, String diseaseClass, int institutionId) throws IOException {
         List<Map<String, String>> dataList = new ArrayList<>();
+        List<Future<Map<String, String>>> futureResults = new ArrayList<>();
+
+        ExecutorService executor = Executors.newFixedThreadPool(4); // 스레드풀 생성
 
         try (InputStream inputStream = new FileInputStream(excelFile);
-             Workbook workbook = new XSSFWorkbook(inputStream)) {  // SXSSFWorkbook 사용 (XSSFWorkbook 스트리밍 모드)
+             Workbook workbook = new XSSFWorkbook(inputStream)) {
 
             int numberOfSheets = workbook.getNumberOfSheets();
 
@@ -127,49 +129,64 @@ public class ExcelUploadService{
 
                     Integer diseaseClassIndex = headerIndexMap.get("DISEASE_CLASS");
                     Integer institutionIdIndex = headerIndexMap.get("INSTITUTION_ID");
-                    int institutionIdValue;
 
                     if (diseaseClassIndex != null && institutionIdIndex != null) {
                         for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) {  // 9번째 행부터 데이터 읽기
                             Row row = sheet.getRow(rowIndex);
                             if (row != null) {
-                                String diseaseClassValue = getCellValueAsString(row.getCell(diseaseClassIndex));
-                                String institutionIdValueStr = getCellValueAsString(row.getCell(institutionIdIndex));
-
-                                if (!institutionIdValueStr.isEmpty()) {
-                                    try {
-                                        institutionIdValue = Integer.parseInt(institutionIdValueStr);
-                                    } catch (NumberFormatException e) {
-                                        System.err.println("숫자로 변환할 수 없는 institutionId 값: " + institutionIdValueStr);
-                                        institutionIdValue = -1; // 잘못된 값은 -1로 설정
-                                    }
-
-                                    if (diseaseClassValue.equals(diseaseClass) && institutionIdValue == institutionId) {
-                                        Map<String, String> rowData = new LinkedHashMap<>();
-                                        for (String header : expectedHeaders) {
-                                            Integer cellIndex = headerIndexMap.get(header);
-                                            if (cellIndex != null) {
-                                                Cell cell = row.getCell(cellIndex);
-                                                String cellValue = (cell != null) ? getCellValueAsString(cell) : "";
-                                                rowData.put(header, cellValue);
+                                // 각 행을 병렬로 처리하도록 스레드풀에 제출
+                                Future<Map<String, String>> future = executor.submit(() -> {
+                                    Map<String, String> rowData = new LinkedHashMap<>();
+                                    String diseaseClassValue = getCellValueAsString(row.getCell(diseaseClassIndex));
+                                    String institutionIdValueStr = getCellValueAsString(row.getCell(institutionIdIndex));
+                                    if (!institutionIdValueStr.isEmpty()) {
+                                        try {
+                                            int institutionIdValue = Integer.parseInt(institutionIdValueStr);
+                                            if (diseaseClassValue.equals(diseaseClass) && institutionIdValue == institutionId) {
+                                                for (String header : expectedHeaders) {
+                                                    Integer cellIndex = headerIndexMap.get(header);
+                                                    if (cellIndex != null) {
+                                                        Cell cell = row.getCell(cellIndex);
+                                                        String cellValue = (cell != null) ? getCellValueAsString(cell) : "";
+                                                        rowData.put(header, cellValue);
+                                                    }
+                                                }
                                             }
-                                        }
-                                        if (!rowData.isEmpty()) {
-                                            dataList.add(rowData);
+                                        } catch (NumberFormatException e) {
+                                            System.err.println("숫자로 변환할 수 없는 institutionId 값: " + institutionIdValueStr);
                                         }
                                     }
-                                }
+                                    return rowData;
+                                });
+                                futureResults.add(future);
                             }
                         }
                     }
                 }
             }
+
+            // 각 병렬 처리된 결과를 수집
+            for (Future<Map<String, String>> future : futureResults) {
+                try {
+                    Map<String, String> result = future.get();
+                    if (!result.isEmpty()) {
+                        dataList.add(result);
+                    }
+                } catch (Exception e) {
+                    System.err.println("병렬 처리 중 오류 발생: " + e.getMessage());
+                }
+            }
+
         } catch (Exception e) {
             System.err.println("엑셀 파일 처리 중 오류 발생: " + e.getMessage());
             throw e;
+        } finally {
+            executor.shutdown();
         }
+
         return dataList;
     }
+
 
     // 동적 필터링을 위한 메소드
     public List<Map<String, Object>> analyzeDataWithFilters(String[] fileIds, Map<String, String> filterConditions, List<String> headers) throws IOException {
@@ -178,7 +195,7 @@ public class ExcelUploadService{
         }
 
         List<Map<String, Object>> responseList = new ArrayList<>();
-        ExecutorService executor = Executors.newFixedThreadPool(4); // 스레드풀 생성
+        ExecutorService executor = Executors.newCachedThreadPool();
 
         try {
             // 비동기 파일 처리
