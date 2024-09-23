@@ -142,7 +142,9 @@ public class ExcelUploadService{
                                     if (!institutionIdValueStr.isEmpty()) {
                                         try {
                                             int institutionIdValue = Integer.parseInt(institutionIdValueStr);
-                                            if (diseaseClassValue.equals(diseaseClass) && institutionIdValue == institutionId) {
+                                            // 필터링 조건 수정: 질환 또는 기관이 "0"이면 필터링하지 않음
+                                            if ((diseaseClass.equals("0") || diseaseClassValue.equals(diseaseClass)) &&
+                                                    (institutionId == 0 || institutionIdValue == institutionId)) {
                                                 for (String header : expectedHeaders) {
                                                     Integer cellIndex = headerIndexMap.get(header);
                                                     if (cellIndex != null) {
