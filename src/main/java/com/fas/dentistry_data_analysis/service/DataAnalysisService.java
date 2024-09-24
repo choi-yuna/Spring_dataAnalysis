@@ -269,6 +269,7 @@ public class DataAnalysisService {
                     result.put("headers", dynamicHeaders);
 
                     // 빈도수 계산
+                    // 빈도수 계산
                     Map<String, Integer> valueCounts = new HashMap<>();
 
                     for (Future<List<Map<String, String>>> future : futures) {
@@ -291,13 +292,18 @@ public class DataAnalysisService {
                             }
 
                             if (!value.isEmpty()) {
-                                String mappedValue = ValueMapping.headerMappingFunctions
-                                        .getOrDefault(header, Function.identity())
-                                        .apply(value);
-                                valueCounts.put(mappedValue, valueCounts.getOrDefault(mappedValue, 0) + 1);
+                                // 콤마로 구분된 값을 분리하여 각각 처리
+                                String[] splitValues = value.split(",\\s*"); // 콤마로 분리하고 공백 제거
+                                for (String individualValue : splitValues) {
+                                    String mappedValue = ValueMapping.headerMappingFunctions
+                                            .getOrDefault(header, Function.identity())
+                                            .apply(individualValue.trim()); // 개별 값에 대해 매핑 처리
+                                    valueCounts.put(mappedValue, valueCounts.getOrDefault(mappedValue, 0) + 1); // 각 값을 카운트
+                                }
                             }
                         }
                     }
+
 
                     // 빈도수를 rows 리스트로 변환
                     List<Map<String, Object>> rows = new ArrayList<>();
