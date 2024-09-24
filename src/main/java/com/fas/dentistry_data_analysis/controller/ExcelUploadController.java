@@ -1,8 +1,6 @@
 package com.fas.dentistry_data_analysis.controller;
 
-import com.fas.dentistry_data_analysis.DTO.AnalysisRequestDTO;
 import com.fas.dentistry_data_analysis.service.ExcelUploadService;
-import com.fas.dentistry_data_analysis.util.HeaderMappingService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -12,7 +10,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.ExecutionException;
 
 @Slf4j
 @RestController
@@ -32,7 +29,7 @@ public class ExcelUploadController {
         try {
             List<String> fileIds = new ArrayList<>();
             for (MultipartFile file : files) {
-                if (!file.getOriginalFilename().endsWith(".xlsx")) {
+                if (!Objects.requireNonNull(file.getOriginalFilename()).endsWith(".xlsx")) {
                     return ResponseEntity.badRequest().body("엑셀 파일(.xlsx)만 업로드 가능합니다.");
                 }
                 String fileId = excelUploadService.storeFile(file);
@@ -40,7 +37,8 @@ public class ExcelUploadController {
                 log.info("Uploaded file with ID: {}", fileId);
             }
             return ResponseEntity.ok(Map.of("fileIds", fileIds));
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("엑셀 파일 처리 중 오류가 발생했습니다.");
         }

@@ -5,11 +5,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class HeaderMappingService {
+public class HeaderMapping {
 
     // 미리 정의된 헤더 매핑을 위한 Map 생성
     private static final Map<String, List<String>> headerMapping;
-    private static final Map<String, String> titleMapping; // Title에 대한 매핑 추가
+    private static final Map<String, String> titleMapping; // Title 대한 매핑 추가
 
     static {
         // header와 대응하는 값들을 미리 Map에 매핑
@@ -101,27 +101,27 @@ public class HeaderMappingService {
         titleMapping.put("OST_NUM", "골수염 개수 데이터");
     }
 
-    // Map을 활용하여 동적으로 헤더를 가져오는 메소드
+    // Map 활용하여 동적으로 헤더를 가져오는 메소드
     public static List<String> determineHeadersBasedOnFilters(List<String> headers) {
         for (String header : headers) {
-            // 해당 header가 Map에 있으면 반환, 없으면 "기타 정보" 반환
+            // 해당 header Map에 있으면 반환, 없으면 "기타 정보" 반환
             if (headerMapping.containsKey(header)) {
                 return headerMapping.get(header);
             }
         }
-        // 해당하는 header가 없을 경우 기본 값 반환
+        // 해당하는 header 없을 경우 기본 값 반환
         return Arrays.asList("기타 정보", "환자 수");
     }
 
-    // Map을 활용하여 동적으로 title을 가져오는 메소드
+    // Map 활용하여 동적으로 title을 가져오는 메소드
     public static String determineTitleBasedOnHeaders(List<String> headers) {
         for (String header : headers) {
-            // 해당 header가 Map에 있으면 반환, 없으면 "기타 데이터" 반환
+            // 해당 header Map 있으면 반환, 없으면 "기타 데이터" 반환
             if (titleMapping.containsKey(header)) {
                 return titleMapping.get(header);
             }
         }
-        // 해당하는 header가 없을 경우 기본 값 반환
+        // 해당하는 header 없을 경우 기본 값 반환
         return "기타 데이터";
     }
 }

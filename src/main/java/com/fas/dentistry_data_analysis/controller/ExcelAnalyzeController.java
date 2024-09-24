@@ -1,14 +1,12 @@
 package com.fas.dentistry_data_analysis.controller;
 
 import com.fas.dentistry_data_analysis.DTO.AnalysisRequestDTO;
-import com.fas.dentistry_data_analysis.service.ExcelUploadService;
-import com.fas.dentistry_data_analysis.util.HeaderMappingService;
+import com.fas.dentistry_data_analysis.service.DataAnalysisService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.*;
@@ -19,11 +17,11 @@ import java.util.concurrent.ExecutionException;
 @RequestMapping("/api")
 public class ExcelAnalyzeController {
 
-    private final ExcelUploadService excelUploadService;
+    private final DataAnalysisService dataAnalysisService;
 
     @Autowired
-    public ExcelAnalyzeController(ExcelUploadService excelUploadService) {
-        this.excelUploadService = excelUploadService;
+    public ExcelAnalyzeController(DataAnalysisService dataAnalysisService) {
+        this.dataAnalysisService = dataAnalysisService;
     }
 
 
@@ -35,14 +33,12 @@ public class ExcelAnalyzeController {
             String diseaseClass = request.getDiseaseClass();
             int institutionId = request.getInstitutionId();
             log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", Arrays.toString(fileIds), diseaseClass, institutionId);
-            List<Map<String, String>> dataList = excelUploadService.analyzeData(fileIds, diseaseClass, institutionId);
+            List<Map<String, String>> dataList = dataAnalysisService.analyzeData(fileIds, diseaseClass, institutionId);
             return ResponseEntity.ok(Map.of("data", dataList));
         } catch (IOException e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("데이터 분석 중 오류가 발생했습니다.");
-        } catch (ExecutionException e) {
-            throw new RuntimeException(e);
-        } catch (InterruptedException e) {
+        } catch (ExecutionException | InterruptedException e) {
             throw new RuntimeException(e);
         }
     }
@@ -69,7 +65,7 @@ public class ExcelAnalyzeController {
             log.info("Analyzing data with filters for file IDs: {}, filters: {}, headers: {}", Arrays.toString(fileIds), filters, headers);
 
             // 동적 필터링과 헤더 필터링을 수행하고 List<Map<String, Object>> 반환
-            List<Map<String, Object>> filteredDataList = excelUploadService.analyzeDataWithFilters(fileIds, filters, headers);
+            List<Map<String, Object>> filteredDataList = dataAnalysisService.analyzeDataWithFilters(fileIds, filters, headers);
 
             // 변환된 List를 클라이언트에 반환
             return ResponseEntity.ok(filteredDataList);
