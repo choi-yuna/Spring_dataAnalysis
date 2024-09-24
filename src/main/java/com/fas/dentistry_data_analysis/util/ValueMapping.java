@@ -4,41 +4,41 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
-public class ValueMappingService {
+public class ValueMapping {
 
     // 각 필드별 매핑 로직을 함수로 정의하고 Map에 등록
     public static final Map<String, Function<String, String>> headerMappingFunctions = new HashMap<>() {{
-        put("P_AGE", ValueMappingService::getAgeRange);
-        put("P_WEIGHT", ValueMappingService::getWeightRange);
-        put("P_HEIGHT", ValueMappingService::getHeightRange);
-        put("CAPTURE_TIME", ValueMappingService::getYearRange);
-        put("INSTITUTION_ID", ValueMappingService::getInstitutionDescription);
-        put("P_GENDER", ValueMappingService::getGenderDescription);
-        put("LS_SMOKE", ValueMappingService::getSmokingDescription);
-        put("LS_ALCHOLE", ValueMappingService::getAlcoholDescription);
-        put("MH_DIABETES", ValueMappingService::getDiabetesDescription);
-        put("CARDIOVASCULAR_DISEASE", ValueMappingService::getCardiovascularDiseaseDescription);
-        put("IMAGE_SRC", ValueMappingService::getImageSourceDescription);
-        put("DIA_PERIO", ValueMappingService::getPerioDiseaseDescription);
-        put("DIS_LOC", ValueMappingService::getLocationDescription);
-        put("DIS_CLASS", ValueMappingService::getOsteomyelitisTypeDescription);
-        put("MR_STAGE", ValueMappingService::getStageDescription);
-        put("MR_HOWTOTAKE", ValueMappingService::getMedicationMethodDescription);
-        put("MR_HOWLONG", ValueMappingService::getMedicationDurationDescription);
-        put("EXTRACTION", ValueMappingService::getCommonOXDescription);
-        put("TRAUMA", ValueMappingService::getCommonOXDescription);
-        put("IMPLANT", ValueMappingService::getCommonOXDescription);
-        put("BONE_SUR", ValueMappingService::getCommonOXDescription);
-        put("FIRST_TREAT", ValueMappingService::getFirstTreatDescription);
-        put("RECUR", ValueMappingService::getCommonOXDescription);
-        put("DI_DISEASE", ValueMappingService::getCraniofacialDescription);
-        put("DI_TIME", ValueMappingService::getDataTimeDescription);
-        put("DI_DETAIL", ValueMappingService::getDiagnosisDetailDescription);
-        put("DI_NAME", ValueMappingService::getDiagnosisNameDescription);
-        put("DI_LOC", ValueMappingService::getLesionLocationDescription);
-        put("MH_HIGHBLOOD",ValueMappingService::getCommonOXDescription);
-        put("MH_OSTEOPROSIS",ValueMappingService::getCommonOXDescription);
-        put("ORIGIN_INF",ValueMappingService::getCommonOXDescription);
+        put("P_AGE", ValueMapping::getAgeRange);
+        put("P_WEIGHT", ValueMapping::getWeightRange);
+        put("P_HEIGHT", ValueMapping::getHeightRange);
+        put("CAPTURE_TIME", ValueMapping::getYearRange);
+        put("INSTITUTION_ID", ValueMapping::getInstitutionDescription);
+        put("P_GENDER", ValueMapping::getGenderDescription);
+        put("LS_SMOKE", ValueMapping::getSmokingDescription);
+        put("LS_ALCHOLE", ValueMapping::getAlcoholDescription);
+        put("MH_DIABETES", ValueMapping::getDiabetesDescription);
+        put("CARDIOVASCULAR_DISEASE", ValueMapping::getCardiovascularDiseaseDescription);
+        put("IMAGE_SRC", ValueMapping::getImageSourceDescription);
+        put("DIA_PERIO", ValueMapping::getPerioDiseaseDescription);
+        put("DIS_LOC", ValueMapping::getLocationDescription);
+        put("DIS_CLASS", ValueMapping::getOsteomyelitisTypeDescription);
+        put("MR_STAGE", ValueMapping::getStageDescription);
+        put("MR_HOWTOTAKE", ValueMapping::getMedicationMethodDescription);
+        put("MR_HOWLONG", ValueMapping::getMedicationDurationDescription);
+        put("EXTRACTION", ValueMapping::getCommonOXDescription);
+        put("TRAUMA", ValueMapping::getCommonOXDescription);
+        put("IMPLANT", ValueMapping::getCommonOXDescription);
+        put("BONE_SUR", ValueMapping::getCommonOXDescription);
+        put("FIRST_TREAT", ValueMapping::getFirstTreatDescription);
+        put("RECUR", ValueMapping::getCommonOXDescription);
+        put("DI_DISEASE", ValueMapping::getCraniofacialDescription);
+        put("DI_TIME", ValueMapping::getDataTimeDescription);
+        put("DI_DETAIL", ValueMapping::getDiagnosisDetailDescription);
+        put("DI_NAME", ValueMapping::getDiagnosisNameDescription);
+        put("DI_LOC", ValueMapping::getLesionLocationDescription);
+        put("MH_HIGHBLOOD", ValueMapping::getCommonOXDescription);
+        put("MH_OSTEOPROSIS", ValueMapping::getCommonOXDescription);
+        put("ORIGIN_INF", ValueMapping::getCommonOXDescription);
     }};
 
     // 기관 ID 매핑
@@ -401,7 +401,7 @@ public class ValueMappingService {
         StringBuilder details = new StringBuilder();
         for (String selection : selections) {
             String description = diagnosisDetailMap.getOrDefault(selection.trim(), "Unknown Diagnosis Detail");
-            if (details.length() > 0) {
+            if (!details.isEmpty()) {
                 details.append(". ");
             }
             details.append(description);

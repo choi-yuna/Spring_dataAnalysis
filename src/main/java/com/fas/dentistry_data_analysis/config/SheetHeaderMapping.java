@@ -22,7 +22,7 @@ public class SheetHeaderMapping {
         sheetHeaderMap.put("(골수염) CRF", Arrays.asList(
                 "DISEASE_CLASS", "INSTITUTION_ID", "PATIENT_NO", "IMAGE_NO", "IMAGE_SRC", "CAPTURE_TIME",
                 "IMAGE_ID", "P_GENDER", "P_AGE",
-                "DIS_LOC","DIS_CLASS", "EXTRACTION", "TRAUMA", "IMPLANT", "BONE_SUR", "ORIGIN_INF", "FIRST_TREAT", "RECUR ",
+                "DIS_LOC","DIS_CLASS", "EXTRACTION", "TRAUMA", "IMPLANT", "BONE_SUR", "ORIGIN_INF", "FIRST_TREAT", "RECUR",
                 "OST_NUM"
         ));
 
