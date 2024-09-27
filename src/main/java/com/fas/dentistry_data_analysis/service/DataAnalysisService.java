@@ -168,7 +168,7 @@ public class DataAnalysisService {
     }
 
 
-    // 동적 필터링을 위한 메소드
+    // 동적 필터링을 위한 메소드 (기존 유지 + 지역별 매핑 및 카운트 추가)
     public List<Map<String, Object>> analyzeDataWithFilters(String[] fileIds, Map<String, String> filterConditions, List<String> headers) throws IOException {
         if (fileIds == null || fileIds.length == 0) {
             throw new IllegalArgumentException("파일 ID 목록이 비어있거나 null입니다.");
@@ -197,13 +197,13 @@ public class DataAnalysisService {
             // 결과 처리
             for (String header : headers) {
                 if ("Tooth".equals(header)) {
-                    // Tooth 헤더가 들어오면 모든 Tooth_로 시작하는 헤더들을 요약 처리
+                    // Tooth 필드 요약 처리
                     Map<String, Object> result = new HashMap<>();
                     result.put("headers", Arrays.asList("치아 상태", "개수"));
                     result.put("id", "Tooth");
                     result.put("title", "치아 상태 요약");
 
-                    // 빈도수 계산 (임플란트, 보철 등)
+                    // 치아 상태 빈도수 계산
                     int implantCount = 0;
                     int prosthesisCount = 0;
                     int normalCount = 0;
@@ -211,19 +211,13 @@ public class DataAnalysisService {
                     int otherCount = 0;
 
                     for (Future<List<Map<String, String>>> future : futures) {
-                        List<Map<String, String>> fileData;
-                        try {
-                            fileData = future.get();
-                        } catch (Exception e) {
-                            throw new IOException("파일 처리 중 오류 발생", e);
-                        }
+                        List<Map<String, String>> fileData = future.get();
 
                         for (Map<String, String> rowData : fileData) {
                             for (Map.Entry<String, String> entry : rowData.entrySet()) {
                                 String key = entry.getKey();
                                 String value = entry.getValue().trim();
 
-                                // Tooth_로 시작하는 헤더만 처리
                                 if (key.startsWith("Tooth_")) {
                                     switch (value) {
                                         case "1":  // 정상
@@ -238,8 +232,7 @@ public class DataAnalysisService {
                                         case "4":  // 브릿지
                                             bridgeCount++;
                                             break;
-                                        case "5":  // 기타
-                                        case "6":  // 기타
+                                        case "5": case "6":  // 기타
                                             otherCount++;
                                             break;
                                     }
@@ -259,6 +252,36 @@ public class DataAnalysisService {
                     result.put("rows", rows);
                     responseList.add(result);
 
+                } else if ("P_RES_AREA".equals(header)) {
+                    // 지역별 필드 요약 처리
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("headers", HeaderMapping.determineHeadersBasedOnFilters(Collections.singletonList(header))); // 헤더 동적 처리
+                    result.put("id", "P_RES_AREA");
+                    result.put("title", HeaderMapping.determineTitleBasedOnHeaders(Collections.singletonList(header))); // 타이틀 동적 처리
+
+                    Map<String, Integer> regionCounts = new HashMap<>();
+
+                    for (Future<List<Map<String, String>>> future : futures) {
+                        List<Map<String, String>> fileData = future.get();
+
+                        for (Map<String, String> rowData : fileData) {
+                            String region = rowData.getOrDefault("P_RES_AREA", "").trim();
+                            if (!region.isEmpty()) {  // null 또는 빈 값 처리
+                                String mappedRegion = mapRegionName(region);  // 지역명 매핑
+                                regionCounts.put(mappedRegion, regionCounts.getOrDefault(mappedRegion, 0) + 1);
+                            }
+                        }
+                    }
+
+                    // 지역별 카운트를 rows 리스트로 변환
+                    List<Map<String, Object>> rows = new ArrayList<>();
+                    for (Map.Entry<String, Integer> entry : regionCounts.entrySet()) {
+                        rows.add(Map.of("value", entry.getKey(), "count", entry.getValue()));
+                    }
+
+                    result.put("rows", rows);
+                    responseList.add(result);
+
                 } else {
                     // 일반적인 헤더 처리
                     Map<String, Object> result = new HashMap<>();
@@ -272,21 +295,10 @@ public class DataAnalysisService {
                     Map<String, Integer> valueCounts = new HashMap<>();
 
                     for (Future<List<Map<String, String>>> future : futures) {
-                        List<Map<String, String>> fileData;
-                        try {
-                            fileData = future.get();
-                        } catch (Exception e) {
-                            throw new IOException("파일 처리 중 오류 발생", e);
-                        }
+                        List<Map<String, String>> fileData = future.get();
 
                         for (Map<String, String> rowData : fileData) {
                             String value = rowData.getOrDefault(header, "").trim();
-
-                            // 필터 조건을 확인하되 필터링 실패해도 매핑을 시도
-                            if (filterConditions.containsKey(header)) {
-                                String filterValue = filterConditions.get(header);
-                        }
-
                             if (!value.isEmpty()) {
                                 String mappedValue = ValueMapping.headerMappingFunctions
                                         .getOrDefault(header, Function.identity())
@@ -299,10 +311,7 @@ public class DataAnalysisService {
                     // 빈도수를 rows 리스트로 변환
                     List<Map<String, Object>> rows = new ArrayList<>();
                     for (Map.Entry<String, Integer> entry : valueCounts.entrySet()) {
-                        Map<String, Object> row = new LinkedHashMap<>();
-                        row.put("value", entry.getKey());
-                        row.put("count", entry.getValue());
-                        rows.add(row);
+                        rows.add(Map.of("value", entry.getKey(), "count", entry.getValue()));
                     }
 
                     result.put("rows", rows);
@@ -310,6 +319,10 @@ public class DataAnalysisService {
                 }
             }
 
+        } catch (ExecutionException e) {
+            throw new RuntimeException(e);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         } finally {
             executor.shutdown();
         }
@@ -317,9 +330,28 @@ public class DataAnalysisService {
         return responseList;
     }
 
+    // 지역명 매핑 함수 추가
+    private String mapRegionName(String label) {
+        if (label.contains("서울")) return "서울특별시";
+        if (label.contains("경기")) return "경기도";
+        if (label.contains("인천")) return "인천광역시";
+        if (label.contains("부산")) return "부산광역시";
+        if (label.contains("대구")) return "대구광역시";
+        if (label.contains("광주")) return "광주광역시";
+        if (label.contains("대전")) return "대전광역시";
+        if (label.contains("울산")) return "울산광역시";
+        if (label.contains("세종")) return "세종특별자치시";
+        if (label.contains("강원")) return "강원도";
+        if (label.contains("충청북도") || label.contains("충북")) return "충청북도";
+        if (label.contains("충청남도") || label.contains("충남")) return "충청남도";
+        if (label.contains("전라북도") || label.contains("전북")) return "전라북도";
+        if (label.contains("전라남도") || label.contains("전남")) return "전라남도";
+        if (label.contains("경상북도") || label.contains("경북")) return "경상북도";
+        if (label.contains("경상남도") || label.contains("경남")) return "경상남도";
+        if (label.contains("제주")) return "제주특별자치도";
+        return "기타지역"; // 매핑되지 않으면 원래 이름 반환
+    }
 
-
-    // 동적 필터링을 처리하는 메소드 (기존)
     private List<Map<String, String>> processFileWithFilters(File excelFile, Map<String, String> filterConditions, List<String> headers) throws IOException {
         List<Map<String, String>> filteredData = new ArrayList<>();
 
