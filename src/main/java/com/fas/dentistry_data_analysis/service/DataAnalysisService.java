@@ -269,7 +269,6 @@ public class DataAnalysisService {
                     result.put("headers", dynamicHeaders);
 
                     // 빈도수 계산
-                    // 빈도수 계산
                     Map<String, Integer> valueCounts = new HashMap<>();
 
                     for (Future<List<Map<String, String>>> future : futures) {
@@ -286,24 +285,16 @@ public class DataAnalysisService {
                             // 필터 조건을 확인하되 필터링 실패해도 매핑을 시도
                             if (filterConditions.containsKey(header)) {
                                 String filterValue = filterConditions.get(header);
-                                if (!filterValue.equals(value)) {
-                                    continue; // 필터 조건에 맞지 않으면 처리하지 않음
-                                }
-                            }
+                        }
 
                             if (!value.isEmpty()) {
-                                // 콤마로 구분된 값을 분리하여 각각 처리
-                                String[] splitValues = value.split(",\\s*"); // 콤마로 분리하고 공백 제거
-                                for (String individualValue : splitValues) {
-                                    String mappedValue = ValueMapping.headerMappingFunctions
-                                            .getOrDefault(header, Function.identity())
-                                            .apply(individualValue.trim()); // 개별 값에 대해 매핑 처리
-                                    valueCounts.put(mappedValue, valueCounts.getOrDefault(mappedValue, 0) + 1); // 각 값을 카운트
-                                }
+                                String mappedValue = ValueMapping.headerMappingFunctions
+                                        .getOrDefault(header, Function.identity())
+                                        .apply(value);
+                                valueCounts.put(mappedValue, valueCounts.getOrDefault(mappedValue, 0) + 1);
                             }
                         }
                     }
-
 
                     // 빈도수를 rows 리스트로 변환
                     List<Map<String, Object>> rows = new ArrayList<>();
@@ -381,7 +372,7 @@ public class DataAnalysisService {
 
                         // 일반 헤더 처리
                         for (String header : headers) {
-                            if (!header.equals("Tooth")) {
+                            if (!header.contains("Tooth")) {
                                 Integer cellIndex = headerIndexMap.get(header);
                                 if (cellIndex != null) {
                                     Cell cell = row.getCell(cellIndex);
