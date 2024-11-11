@@ -14,6 +14,11 @@ java {
 	}
 }
 
+bootWar{			// war 배포 파일명
+	archiveBaseName = 'data-analysis'
+	archiveFileName = 'data-analysis.war'
+	archiveVersion = "0.0.0"
+}
 configurations {
 	compileOnly {
 		extendsFrom annotationProcessor
@@ -30,6 +35,8 @@ dependencies {
 	annotationProcessor 'org.projectlombok:lombok'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	providedRuntime 'org.springframework.boot:spring-boot-starter-tomcat'
+
 
 	implementation 'org.apache.poi:poi:5.0.0'
 	implementation 'org.apache.poi:poi-ooxml:5.0.0'
