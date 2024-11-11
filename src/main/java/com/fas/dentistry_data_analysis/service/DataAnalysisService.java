@@ -437,27 +437,27 @@ public class DataAnalysisService {
 
                 // 숫자 범위 조건의 경우, 범위 값에 맞는지 확인
                 switch (header) {
-                    case "P_AGE" -> {
+                    case "P_AGE" : {
                         if (!matchesAgeCondition(cellValue, expectedValue)) {
                             return false;
                         }
                     }
-                    case "P_WEIGHT" -> {
+                    case "P_WEIGHT" : {
                         if (!matchesWeightCondition(cellValue, expectedValue)) {
                             return false;
                         }
                     }
-                    case "P_HEIGHT" -> {
+                    case "P_HEIGHT" : {
                         if (!matchesHeightCondition(cellValue, expectedValue)) {
                             return false;
                         }
                     }
-                    case "CAPTURE_TIME" -> {
+                    case "CAPTURE_TIME" : {
                         if (!matchesYearRangeCondition(cellValue, expectedValue)) {
                             return false;
                         }
                     }
-                    default -> {
+                    default : {
                         // 기본 문자열 비교
                         if (!cellValue.equals(expectedValue)) {
                             return false;
