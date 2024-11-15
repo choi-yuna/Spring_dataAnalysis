@@ -35,9 +35,9 @@ public class ExcelUploadService{
             Files.write(filePath, file.getBytes());
             // 파일이 제대로 저장되었는지 확인하는 로그
             if (Files.exists(filePath)) {
-                System.out.println("파일 저장 성공: " + filePath.toString());
+                log.info("파일 저장 성공 : {}" , filePath.toString());
             } else {
-                System.out.println("파일 저장 실패: " + filePath.toString());
+                log.info("파일 저장 실패: {}",  filePath.toString());
             }
 
             // 파일 ID와 경로를 저장
