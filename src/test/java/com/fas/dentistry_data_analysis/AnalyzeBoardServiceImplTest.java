@@ -25,7 +25,7 @@ class AnalyzeBoardServiceImplTest {
         String folderPath = "C:/Users/fasol/OneDrive/바탕 화면/BRM 701~800";
 
         // processFilesInFolder 호출하여 결과를 가져옴
-        List<Map<String, Object>> result = analyzeBoardService.processFilesInFolder(folderPath);
+        Map<String, Object> result = analyzeBoardService.processFilesInFolder(folderPath);
 
         // 결과가 null이 아니고 질환별, 기관별 상태 정보가 포함되어 있는지 확인
 
