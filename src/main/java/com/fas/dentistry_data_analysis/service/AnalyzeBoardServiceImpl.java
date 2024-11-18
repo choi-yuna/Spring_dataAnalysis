@@ -61,7 +61,7 @@ public class AnalyzeBoardServiceImpl {
             Map<String, Object> diseaseData = groupedData.get(diseaseClass);
             if (!diseaseData.containsKey("title")) {
                 diseaseData.put("title", diseaseClass);
-                diseaseData.put("totalData", new ArrayList<>(Collections.nCopies(7, 0))); // 초기값 설정
+                diseaseData.put("totalData", new ArrayList<>(Collections.nCopies(6, 0))); // 초기값 설정
                 diseaseData.put("subData", new ArrayList<>());
             }
 
@@ -79,7 +79,7 @@ public class AnalyzeBoardServiceImpl {
 
             if (goalCount > 0) {
                 double buildRate = (double) secondCheck / goalCount * 100;
-                totalData.set(6, (int) buildRate); // 구축율을 totalData의 7번째 항목에 넣기
+                totalData.set(5, (int) buildRate); // 구축율을 totalData의 6번째 항목에 넣기
             }
 
             // subData에 각 기관 정보 추가
@@ -92,7 +92,7 @@ public class AnalyzeBoardServiceImpl {
             subRow.add(item.get("2차검수").toString());
 
             // 43% 대신 실제 구축율 값 추가
-            int buildRate = (int) totalData.get(6);
+            int buildRate = (int) totalData.get(5);
             subRow.add(buildRate + ""); // 구축율을 추가 (백분율)
 
             List<List<String>> subData = (List<List<String>>) diseaseData.get("subData");
@@ -117,7 +117,7 @@ public class AnalyzeBoardServiceImpl {
             Map<String, Object> institutionData = groupedData.get(institutionId);
             if (!institutionData.containsKey("title")) {
                 institutionData.put("title",institutionId);
-                institutionData.put("totalData", new ArrayList<>(Collections.nCopies(7, 0))); // 초기값 설정
+                institutionData.put("totalData", new ArrayList<>(Collections.nCopies(6, 0))); // 초기값 설정
                 institutionData.put("subData", new ArrayList<>());
             }
 
@@ -135,7 +135,7 @@ public class AnalyzeBoardServiceImpl {
 
             if (goalCount > 0) {
                 double buildRate = (double) secondCheck / goalCount * 100;
-                totalData.set(6, (int) buildRate); // 구축율을 totalData의 7번째 항목에 넣기
+                totalData.set(5, (int) buildRate); // 구축율을 totalData의 7번째 항목에 넣기
             }
 
             // subData에 각 질환 정보 추가
@@ -148,7 +148,7 @@ public class AnalyzeBoardServiceImpl {
             subRow.add(item.get("2차검수").toString());
 
             // 43% 대신 실제 구축율 값 추가
-            int buildRate = (int) totalData.get(6);
+            int buildRate = (int) totalData.get(5);
             subRow.add(buildRate + ""); // 구축율을 추가 (백분율)
 
             List<List<String>> subData = (List<List<String>>) institutionData.get("subData");
@@ -163,7 +163,7 @@ public class AnalyzeBoardServiceImpl {
         Map<String, Object> allData = new HashMap<>();
         allData.put("title", title);
 
-        List<Integer> totalData = new ArrayList<>(Collections.nCopies(7, 0));
+        List<Integer> totalData = new ArrayList<>(Collections.nCopies(6, 0));
         Map<String, Map<String, Object>> groupedDataMap = new HashMap<>();  // 데이터를 그룹화
 
         // 데이터를 그룹화하고 누적
@@ -201,7 +201,7 @@ public class AnalyzeBoardServiceImpl {
 
         if (goalCount > 0) {
             double buildRate = (double) secondCheck / goalCount * 100;
-            totalData.set(6, (int) buildRate); // 구축율을 totalData의 7번째 항목에 넣기
+            totalData.set(5, (int) buildRate); // 구축율을 totalData의 6// 번째 항목에 넣기
         }
 
         allData.put("totalData", totalData);
