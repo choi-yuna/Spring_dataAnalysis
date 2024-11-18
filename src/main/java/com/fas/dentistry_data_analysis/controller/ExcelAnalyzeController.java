@@ -29,9 +29,9 @@ public class ExcelAnalyzeController {
     }
 
     @PostMapping("/dashboard")
-    public ResponseEntity<?> dashboardData() {
+    public ResponseEntity<?> dashboardData() throws IOException {
         String folderPath = "C:/Users/fasol/OneDrive/바탕 화면/BRM 701~800";
-        Map<String, Object> stringObjectMap = analyzeBoardService.processFilesInFolder(folderPath);
+        Map<String, Integer> stringObjectMap = analyzeBoardService.processFilesInFolder(folderPath);
         return ResponseEntity.ok(Map.of("data", stringObjectMap));
     }
     // 기존 분석 API
