@@ -33,7 +33,7 @@ public class ExcelAnalyzeController {
 
     @PostMapping("/dashboard")
     public ResponseEntity<?> dashboardData() throws IOException {
-        List<Map<String, Object>>   stringObjectMap = analyzeBoardService.processFilesInFolder(folderPath);
+        Map<String, Object>   stringObjectMap = analyzeBoardService.processFilesInFolder(folderPath);
         return ResponseEntity.ok(Map.of("data", stringObjectMap));
     }
     // 기존 분석 API

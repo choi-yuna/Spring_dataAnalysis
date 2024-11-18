@@ -13,6 +13,7 @@ public class ValueMapping {
         put("P_HEIGHT", ValueMapping::getHeightRange);
         put("CAPTURE_TIME", ValueMapping::getYearRange);
         put("INSTITUTION_ID", ValueMapping::getInstitutionDescription);
+        put("DISEASE_CLASS", ValueMapping::getDiseaseClass);
         put("P_GENDER", ValueMapping::getGenderDescription);
         put("LS_SMOKE", ValueMapping::getSmokingDescription);
         put("LS_ALCHOLE", ValueMapping::getAlcoholDescription);
@@ -39,6 +40,14 @@ public class ValueMapping {
         put("MH_HIGHBLOOD", ValueMapping::getCommonOXDescription);
         put("MH_OSTEOPROSIS", ValueMapping::getCommonOXDescription);
         put("ORIGIN_INF", ValueMapping::getCommonOXDescription);
+    }};
+
+
+    private static final Map<String, String> DiseaseClassMap = new HashMap<>() {{
+        put("A", "치주질환");
+        put("B", "골수염");
+        put("C", "구강암");
+        put("D", "두개안면");
     }};
 
     // 기관 ID 매핑
@@ -322,6 +331,10 @@ public class ValueMapping {
     // 특정 매핑을 가져오는 메소드
     public static String getInstitutionDescription(String value) {
         return institutionMap.getOrDefault(value, "Unknown Institution");
+    }
+
+    public static String getDiseaseClass(String value) {
+        return DiseaseClassMap.getOrDefault(value, "Unknown");
     }
 
     public static String getGenderDescription(String value) {
