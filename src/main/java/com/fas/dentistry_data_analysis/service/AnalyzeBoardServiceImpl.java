@@ -35,12 +35,12 @@ public class AnalyzeBoardServiceImpl {
 
         // 질환별 데이터 처리
         List<Map<String, Object>> diseaseData = groupDataByDisease(resultList);
-        diseaseData.add(createAllDataByDisease(resultList));  // 질환ALL 데이터 추가
+        diseaseData.add(createAllData(resultList, "질환", "질환 ALL"));  // 질환ALL 데이터 추가
         response.put("질환별", diseaseData);
 
         // 기관별 데이터 처리
         List<Map<String, Object>> institutionData = groupDataByInstitution(resultList);
-        institutionData.add(createAllDataByInstitution(resultList));  // 기관ALL 데이터 추가
+        institutionData.add(createAllData(resultList, "기관", "기관 ALL"));  // 기관ALL 데이터 추가
         response.put("기관별", institutionData);
 
         return response;
@@ -158,38 +158,41 @@ public class AnalyzeBoardServiceImpl {
         return formatGroupedData(groupedData);
     }
 
-    // 질환 ALL 데이터 생성
-    private Map<String, Object> createAllDataByDisease(List<Map<String, Object>> resultList) {
+    // 질환 ALL 또는 기관 ALL 데이터를 생성하는 통합 메소드
+    private Map<String, Object> createAllData(List<Map<String, Object>> resultList, String groupingKey, String title) {
         Map<String, Object> allData = new HashMap<>();
-        allData.put("title", "질환 ALL");
+        allData.put("title", title);
 
         List<Integer> totalData = new ArrayList<>(Collections.nCopies(7, 0));
-        Map<String, Map<String, Object>> institutionDataMap = new HashMap<>();  // 기관별 데이터 누적
+        Map<String, Map<String, Object>> groupedDataMap = new HashMap<>();  // 데이터를 그룹화
 
+        // 데이터를 그룹화하고 누적
         for (Map<String, Object> item : resultList) {
+            String groupKey = (String) item.get(groupingKey); // 기관 또는 질환을 그룹화
+            if (!groupedDataMap.containsKey(groupKey)) {
+                groupedDataMap.put(groupKey, new HashMap<>());
+                groupedDataMap.get(groupKey).put(groupingKey, groupKey);
+                groupedDataMap.get(groupKey).put("목표건수", 0);
+                groupedDataMap.get(groupKey).put("라벨링건수", 0);
+                groupedDataMap.get(groupKey).put("1차검수", 0);
+                groupedDataMap.get(groupKey).put("데이터구성검수", 0);
+                groupedDataMap.get(groupKey).put("2차검수", 0);
+            }
+
+            // 데이터 누적
+            Map<String, Object> groupData = groupedDataMap.get(groupKey);
+            groupData.put("목표건수", (int) groupData.get("목표건수") + (int) item.get("목표건수"));
+            groupData.put("라벨링건수", (int) groupData.get("라벨링건수") + (int) item.get("라벨링건수"));
+            groupData.put("1차검수", (int) groupData.get("1차검수") + (int) item.get("1차검수"));
+            groupData.put("데이터구성검수", (int) groupData.get("데이터구성검수") + (int) item.get("데이터구성검수"));
+            groupData.put("2차검수", (int) groupData.get("2차검수") + (int) item.get("2차검수"));
+
+            // 총합 데이터 누적
             totalData.set(0, totalData.get(0) + (int) item.get("목표건수"));
             totalData.set(1, totalData.get(1) + (int) item.get("라벨링건수"));
             totalData.set(2, totalData.get(2) + (int) item.get("1차검수"));
             totalData.set(3, totalData.get(3) + (int) item.get("데이터구성검수"));
             totalData.set(4, totalData.get(4) + (int) item.get("2차검수"));
-
-            String institutionId = (String) item.get("기관");
-            if (!institutionDataMap.containsKey(institutionId)) {
-                institutionDataMap.put(institutionId, new HashMap<>());
-                institutionDataMap.get(institutionId).put("기관", institutionId);
-                institutionDataMap.get(institutionId).put("목표건수", 0);
-                institutionDataMap.get(institutionId).put("라벨링건수", 0);
-                institutionDataMap.get(institutionId).put("1차검수", 0);
-                institutionDataMap.get(institutionId).put("데이터구성검수", 0);
-                institutionDataMap.get(institutionId).put("2차검수", 0);
-            }
-
-            Map<String, Object> institutionData = institutionDataMap.get(institutionId);
-            institutionData.put("목표건수", (int) institutionData.get("목표건수") + (int) item.get("목표건수"));
-            institutionData.put("라벨링건수", (int) institutionData.get("라벨링건수") + (int) item.get("라벨링건수"));
-            institutionData.put("1차검수", (int) institutionData.get("1차검수") + (int) item.get("1차검수"));
-            institutionData.put("데이터구성검수", (int) institutionData.get("데이터구성검수") + (int) item.get("데이터구성검수"));
-            institutionData.put("2차검수", (int) institutionData.get("2차검수") + (int) item.get("2차검수"));
         }
 
         // 구축율 계산: (2차검수 / 목표건수) * 100
@@ -203,54 +206,24 @@ public class AnalyzeBoardServiceImpl {
 
         allData.put("totalData", totalData);
 
-        // subData에 기관별 데이터 추가
+        // subData에 그룹화된 데이터 추가
         List<List<String>> subData = new ArrayList<>();
-        for (Map<String, Object> institutionData : institutionDataMap.values()) {
+        for (Map<String, Object> groupData : groupedDataMap.values()) {
             List<String> subRow = new ArrayList<>();
-            subRow.add((String) institutionData.get("기관"));
-            subRow.add(institutionData.get("목표건수").toString());
-            subRow.add(institutionData.get("라벨링건수").toString());
-            subRow.add(institutionData.get("1차검수").toString());
-            subRow.add(institutionData.get("데이터구성검수").toString());
-            subRow.add(institutionData.get("2차검수").toString());
+            subRow.add((String) groupData.get(groupingKey));  // '기관' 또는 '질환' 이름
+            subRow.add(groupData.get("목표건수").toString());
+            subRow.add(groupData.get("라벨링건수").toString());
+            subRow.add(groupData.get("1차검수").toString());
+            subRow.add(groupData.get("데이터구성검수").toString());
+            subRow.add(groupData.get("2차검수").toString());
 
-            int buildRateForInstitution = (int) institutionData.get("2차검수") * 100 / (int) institutionData.get("목표건수");
-            subRow.add(buildRateForInstitution + ""); // 구축율을 추가 (백분율)
+            int buildRateForGroup = (int) groupData.get("2차검수") * 100 / (int) groupData.get("목표건수");
+            subRow.add(buildRateForGroup + ""); // 구축율을 추가 (백분율)
 
             subData.add(subRow);
         }
 
         allData.put("subData", subData);
-
-        return allData;
-    }
-
-    // 기관 ALL 데이터 생성
-    private Map<String, Object> createAllDataByInstitution(List<Map<String, Object>> resultList) {
-        Map<String, Object> allData = new HashMap<>();
-        allData.put("title", "기관 ALL");
-
-        List<Integer> totalData = new ArrayList<>(Collections.nCopies(7, 0));
-
-        for (Map<String, Object> item : resultList) {
-            totalData.set(0, totalData.get(0) + (int) item.get("목표건수"));
-            totalData.set(1, totalData.get(1) + (int) item.get("라벨링건수"));
-            totalData.set(2, totalData.get(2) + (int) item.get("1차검수"));
-            totalData.set(3, totalData.get(3) + (int) item.get("데이터구성검수"));
-            totalData.set(4, totalData.get(4) + (int) item.get("2차검수"));
-        }
-
-        // 구축율 계산: (2차검수 / 목표건수) * 100
-        int secondCheck = totalData.get(4);
-        int goalCount = totalData.get(0);
-
-        if (goalCount > 0) {
-            double buildRate = (double) secondCheck / goalCount * 100;
-            totalData.set(6, (int) buildRate); // 구축율을 totalData의 7번째 항목에 넣기
-        }
-
-        allData.put("totalData", totalData);
-        allData.put("subData", Collections.emptyList()); // 기관별 ALL은 subData가 필요 없을 수 있음
 
         return allData;
     }
