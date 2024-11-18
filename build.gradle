@@ -42,7 +42,20 @@ dependencies {
 	implementation 'org.apache.poi:poi-ooxml:5.0.0'
 	implementation 'org.apache.xmlbeans:xmlbeans:5.1.1'
 	implementation 'org.apache.commons:commons-collections4:4.4'
-	implementation 'org.apache.jackrabbit:jackrabbit-webdav:2.21.0'
+	implementation group: 'org.apache.jackrabbit', name: 'jackrabbit-jcr-commons', version: '2.22.0'
+	// https://mvnrepository.com/artifact/org.apache.jackrabbit/jackrabbit-api
+	implementation group: 'org.apache.jackrabbit', name: 'jackrabbit-api', version: '2.19.3'
+	// https://mvnrepository.com/artifact/org.apache.jackrabbit/jackrabbit-core
+	implementation group: 'org.apache.jackrabbit', name: 'jackrabbit-core', version: '2.22.0'
+
+	// https://mvnrepository.com/artifact/org.apache.jackrabbit/jackrabbit-webdav
+	implementation group: 'org.apache.jackrabbit', name: 'jackrabbit-webdav', version: '2.22.0'
+
+
+
+
+
+
 
 
 }
