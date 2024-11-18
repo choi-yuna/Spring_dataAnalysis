@@ -1,5 +1,6 @@
 package com.fas.dentistry_data_analysis.service;
 
+import com.fas.dentistry_data_analysis.util.ExcelUtils;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
@@ -16,28 +17,23 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class AnalyzeBoardServiceImpl {
 
     // 폴더 경로에서 xlsx 파일을 찾아서 처리하는 메소드
-    public Map<String, Integer> processFilesInFolder(String folderPath) throws IOException {
+    public List<Map<String, Object>> processFilesInFolder(String folderPath) throws IOException {
         File folder = new File(folderPath);
         if (!folder.exists() || !folder.isDirectory()) {
             throw new IllegalArgumentException("폴더 경로가 유효하지 않거나 폴더가 아닙니다.");
         }
 
-        // 결과를 저장할 맵
-        Map<String, Integer> resultMap = new HashMap<>();
-        resultMap.put("전체파일", 0);
-        resultMap.put("오류파일", 0);
-        resultMap.put("라벨링", 0);
-        resultMap.put("1차검수", 0);
-        resultMap.put("2차검수", 0);
+        // 결과를 저장할 리스트 (기관과 질환을 포함한 모든 항목이 리스트에 저장됩니다)
+        List<Map<String, Object>> resultList = new ArrayList<>();
 
         // 폴더 내 모든 .xlsx 파일을 재귀적으로 찾고 처리
-        processFolderRecursively(folder, resultMap);
+        processFolderRecursively(folder, resultList);
 
-        return resultMap;
+        return resultList;
     }
 
     // 폴더를 재귀적으로 탐색하는 메소드
-    private void processFolderRecursively(File folder, Map<String, Integer> resultMap) throws IOException {
+    private void processFolderRecursively(File folder, List<Map<String, Object>> resultList) throws IOException {
         // 폴더 내의 모든 .xlsx 파일을 찾기
         File[] files = folder.listFiles((dir, name) -> name.toLowerCase().endsWith(".xlsx"));
 
@@ -46,44 +42,50 @@ public class AnalyzeBoardServiceImpl {
                 // 엑셀 파일 처리
                 List<Map<String, String>> filteredData = processFile(file);
 
+                // 이미지 ID를 추적하여 중복을 방지
+                Set<String> processedImageIds = new HashSet<>();
+
+                // 이미지 ID에 대해 전처리
                 for (Map<String, String> rowData : filteredData) {
                     String imageId = rowData.get("IMAGE_ID");
+                    String diseaseClass = rowData.get("DISEASE_CLASS");
+                    String institutionId = rowData.get("INSTITUTION_ID");
+
+                    // '목표건수' 카운트 (파일명이 중복되지 않게 처리)
+                    if (!processedImageIds.contains(imageId)) {
+                        processedImageIds.add(imageId);
+                        incrementStatus(resultList, institutionId, diseaseClass, "목표건수");
+                    }
+                }
+
+                // 각 `imageId`에 대해 필요한 파일이 존재하는지 확인하고 데이터구성검수 카운트
+                for (Map<String, String> rowData : filteredData) {
+                    String imageId = rowData.get("IMAGE_ID");
+                    String diseaseClass = rowData.get("DISEASE_CLASS");
+                    String institutionId = rowData.get("INSTITUTION_ID");
 
                     // dcm, json, ini 파일 존재 여부 확인 (하위 폴더 포함)
                     boolean dcmExists = checkFileExistsInSubfolders(folder, imageId + ".dcm");
                     boolean jsonExists = checkFileExistsInSubfolders(folder, imageId + ".json");
                     boolean iniExists = checkFileExistsInSubfolders(folder, imageId + ".ini");
 
-                    System.out.println("확인 중: " + imageId);
-                    System.out.println("dcm 파일 존재 여부: " + dcmExists);
-                    System.out.println("json 파일 존재 여부: " + jsonExists);
-                    System.out.println("ini 파일 존재 여부: " + iniExists);
+                    // 누락된 파일이 있으면 데이터 구성 검수 로 카운트
+                    if (!(dcmExists && jsonExists && iniExists)) {
+                        incrementStatus(resultList, institutionId, diseaseClass, "데이터구성검수");
+                    }
 
-                    if (dcmExists && jsonExists && iniExists) {
-                        // 모든 파일이 존재하면 "전체파일" 갯수 증가
-                        resultMap.put("전체파일", resultMap.get("전체파일") + 1);
+                    // JSON 파일 파싱하여 상태 체크
+                    File jsonFile = getFileInSubfolders(folder, imageId + ".json");
+                    if (jsonFile != null) {
+                        // JSON 상태값 추출
+                        int labelingStatus = getJsonStatus(jsonFile, "Labeling_Info", "완료");
+                        int firstCheckStatus = getJsonStatus(jsonFile, "First_Check_Info", "2");
+                        int secondCheckStatus = getJsonStatus(jsonFile, "Second_Check_Info", "2");
 
-                        // JSON 파일 파싱하여 상태 체크
-                        File jsonFile = getFileInSubfolders(folder, imageId + ".json");
-                        if (jsonFile != null) {
-                            // 0번째 인덱스를 확인하여 완료 상태 체크
-                            int labelingStatus = getJsonStatus(jsonFile, "Labeling_Info", "완료");
-                            int firstCheckStatus = getJsonStatus(jsonFile, "First_Check_Info", "2");
-                            int secondCheckStatus = getJsonStatus(jsonFile, "Second_Check_Info", "2");
-
-                            if (labelingStatus == 2) {
-                                resultMap.put("라벨링", resultMap.get("라벨링") + 1);
-                            }
-                            if (firstCheckStatus == 2) {
-                                resultMap.put("1차검수", resultMap.get("1차검수") + 1);
-                            }
-                            if (secondCheckStatus == 2) {
-                                resultMap.put("2차검수", resultMap.get("2차검수") + 1);
-                            }
-                        }
-                    } else {
-                        // 하나라도 누락된 파일이 있으면 "오류파일" 갯수 증가
-                        resultMap.put("오류파일", resultMap.get("오류파일") + 1);
+                        // 상태 값 집계
+                        if (labelingStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, "라벨링건수");
+                        if (firstCheckStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, "1차검수");
+                        if (secondCheckStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, "2차검수");
                     }
                 }
             }
@@ -92,12 +94,37 @@ public class AnalyzeBoardServiceImpl {
         // 하위 폴더가 있는 경우, 재귀적으로 탐색
         File[] subFolders = folder.listFiles(File::isDirectory);  // 디렉토리만 필터링
         if (subFolders != null) {
-            System.out.println("하위 폴더들:");
             for (File subFolder : subFolders) {
-                System.out.println("하위 폴더 경로: " + subFolder.getAbsolutePath());  // 하위 폴더 경로 출력
-                processFolderRecursively(subFolder, resultMap);  // 하위 폴더 재귀 호출
+                processFolderRecursively(subFolder, resultList);  // 하위 폴더 재귀 호출
             }
         }
+    }
+
+    // 상태 값을 집계하는 메소드
+    private void incrementStatus(List<Map<String, Object>> resultList,
+                                 String institutionId, String diseaseClass, String status) {
+        // 이미 결과 리스트에 해당 기관과 질환이 존재하는지 확인
+        Optional<Map<String, Object>> existing = resultList.stream()
+                .filter(item -> institutionId.equals(item.get("기관")) && diseaseClass.equals(item.get("질환")))
+                .findFirst();
+
+        // 해당 기관과 질환이 없으면 새로 추가
+        if (existing.isEmpty()) {
+            Map<String, Object> newEntry = new HashMap<>();
+            newEntry.put("기관", institutionId);
+            newEntry.put("질환", diseaseClass);
+            newEntry.put("2차검수", 0);
+            newEntry.put("1차검수", 0);
+            newEntry.put("목표건수", 0);
+            newEntry.put("데이터구성검수", 0);
+            newEntry.put("라벨링건수", 0);
+            resultList.add(newEntry);
+            existing = Optional.of(newEntry);
+        }
+
+        // 해당 항목을 찾아서 값 증가
+        Map<String, Object> statusMap = existing.get();
+        statusMap.put(status, (int) statusMap.get(status) + 1);
     }
 
     // 하위 폴더까지 포함하여 파일을 찾는 메소드
@@ -160,11 +187,9 @@ public class AnalyzeBoardServiceImpl {
             JsonNode rootNode = objectMapper.readTree(jsonFile);
             JsonNode infoNode = rootNode.get(key);
 
-            // 해당 키의 값이 배열인지 확인하고 배열의 첫 번째 요소를 가져옵니다.
             if (infoNode != null && infoNode.isArray() && infoNode.size() > 0) {
                 JsonNode firstElement = infoNode.get(0);  // 첫 번째 요소
 
-                // Labeling_Info의 경우
                 if (key.equals("Labeling_Info")) {
                     JsonNode labelingStatusNode = firstElement.get("Labelling");
                     if (labelingStatusNode != null && labelingStatusNode.asText().equals("완료")) {
@@ -172,7 +197,6 @@ public class AnalyzeBoardServiceImpl {
                     }
                 }
 
-                // First_Check_Info의 경우
                 if (key.equals("First_Check_Info")) {
                     JsonNode checkResultNode = firstElement.get("Checking1");
                     if (checkResultNode != null && checkResultNode.asText().equals("2")) {
@@ -180,7 +204,6 @@ public class AnalyzeBoardServiceImpl {
                     }
                 }
 
-                // Second_Check_Info의 경우
                 if (key.equals("Second_Check_Info")) {
                     JsonNode checkResultNode = firstElement.get("Checking2");
                     if (checkResultNode != null && checkResultNode.asText().equals("2")) {
@@ -193,7 +216,6 @@ public class AnalyzeBoardServiceImpl {
         }
         return 0;  // 상태 값이 없거나 오류가 발생하면 기본값인 0을 반환
     }
-
 
     // 엑셀 파일에서 IMAGE_ID 값을 추출하는 메소드
     private List<Map<String, String>> processFile(File excelFile) throws IOException {
@@ -232,12 +254,25 @@ public class AnalyzeBoardServiceImpl {
                     if (row != null) {
                         Map<String, String> rowData = new LinkedHashMap<>();
 
-                        // "IMAGE_ID" 필드 처리 (이미지 코드 관련 데이터만 추출)
+                        // "IMAGE_ID", "DISEASE_CLASS", "INSTITUTION_ID" 필드 처리
                         Integer imageIdIndex = headerIndexMap.get("IMAGE_ID");
+                        Integer diseaseClassIndex = headerIndexMap.get("DISEASE_CLASS");
+                        Integer institutionIdIndex = headerIndexMap.get("INSTITUTION_ID");
+
                         if (imageIdIndex != null) {
                             Cell imageIdCell = row.getCell(imageIdIndex);
-                            String imageIdValue = (imageIdCell != null) ? imageIdCell.toString().trim() : "";
+                            String imageIdValue = (imageIdCell != null) ? ExcelUtils.getCellValueAsString(imageIdCell): "";
                             rowData.put("IMAGE_ID", imageIdValue);
+                        }
+                        if (diseaseClassIndex != null) {
+                            Cell diseaseClassCell = row.getCell(diseaseClassIndex);
+                            String diseaseClassValue = (diseaseClassCell != null) ? ExcelUtils.getCellValueAsString(diseaseClassCell): "";
+                            rowData.put("DISEASE_CLASS", diseaseClassValue);
+                        }
+                        if (institutionIdIndex != null) {
+                            Cell institutionIdCell = row.getCell(institutionIdIndex);
+                            String institutionIdValue = (institutionIdCell != null) ? ExcelUtils.getCellValueAsString(institutionIdCell) : "";
+                            rowData.put("INSTITUTION_ID", institutionIdValue);
                         }
 
                         // "IMAGE_ID"만 있으면 filteredData에 추가
@@ -251,4 +286,3 @@ public class AnalyzeBoardServiceImpl {
         return filteredData;
     }
 }
-

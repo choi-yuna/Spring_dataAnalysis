@@ -18,6 +18,9 @@ import java.util.concurrent.ExecutionException;
 @RequestMapping("/api")
 public class ExcelAnalyzeController {
 
+    private final String folderPath = "C:/Users/fasol/OneDrive/바탕 화면/BRM 701~800";
+
+
   //  private final DataAnalysisService dataAnalysisService;
         private final AnalyzeDataService analyzeDataService;
         private final AnalyzeBoardServiceImpl analyzeBoardService;
@@ -30,8 +33,7 @@ public class ExcelAnalyzeController {
 
     @PostMapping("/dashboard")
     public ResponseEntity<?> dashboardData() throws IOException {
-        String folderPath = "C:/Users/fasol/OneDrive/바탕 화면/BRM 701~800";
-        Map<String, Integer> stringObjectMap = analyzeBoardService.processFilesInFolder(folderPath);
+        List<Map<String, Object>>   stringObjectMap = analyzeBoardService.processFilesInFolder(folderPath);
         return ResponseEntity.ok(Map.of("data", stringObjectMap));
     }
     // 기존 분석 API
@@ -60,7 +62,6 @@ public class ExcelAnalyzeController {
     @PostMapping("/analyze")
     public ResponseEntity<?> analyzeData(@RequestBody AnalysisRequestDTO request) {
         try {
-            String folderPath = "C:/Users/fasol/OneDrive/바탕 화면/BRM 701~800";
             String diseaseClass = request.getDiseaseClass();
             int institutionId = request.getInstitutionId();
             log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", folderPath, diseaseClass, institutionId);
