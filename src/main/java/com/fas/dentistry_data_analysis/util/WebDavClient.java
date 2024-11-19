@@ -28,15 +28,16 @@ public class WebDavClient {
         System.out.println("비밀번호: " + (password != null ? "********" : "null"));
 
         HttpClient client = new HttpClient();
+
+        // 인증 정보 설정
         client.getState().setCredentials(null, null, new UsernamePasswordCredentials(username, password));
 
-        // PropFindMethod 생성
         PropFindMethod method = null;
-        try {
-            method = new PropFindMethod(serverUrl);
 
-            // Depth 헤더 설정
-            method.addRequestHeader("Depth", "1");
+        try {
+            // WebDAV 요청 생성
+            method = new PropFindMethod(serverUrl);
+            method.addRequestHeader("Depth", "1"); // 하위 디렉토리까지 조회
 
             System.out.println("HTTP 요청 실행 중...");
             int statusCode = client.executeMethod(method);
@@ -54,6 +55,12 @@ public class WebDavClient {
                 }
             } else {
                 System.out.println("에러 발생! HTTP 상태 코드: " + statusCode);
+                System.out.println("응답 메시지: " + method.getResponseBodyAsString());
+                System.out.println("요청 URI: " + method.getURI());
+                System.out.println("요청 헤더: ");
+                for (org.apache.commons.httpclient.Header header : method.getRequestHeaders()) {
+                    System.out.println(" - " + header.getName() + ": " + header.getValue());
+                }
             }
         } catch (IOException | DavException e) {
             System.out.println("WebDAV 요청 실패! URL 또는 권한을 확인하세요.");
