@@ -42,14 +42,20 @@ dependencies {
 	implementation 'org.apache.poi:poi-ooxml:5.0.0'
 	implementation 'org.apache.xmlbeans:xmlbeans:5.1.1'
 	implementation 'org.apache.commons:commons-collections4:4.4'
-	implementation group: 'org.apache.jackrabbit', name: 'jackrabbit-jcr-commons', version: '2.22.0'
-	// https://mvnrepository.com/artifact/org.apache.jackrabbit/jackrabbit-api
-	implementation group: 'org.apache.jackrabbit', name: 'jackrabbit-api', version: '2.19.3'
-	// https://mvnrepository.com/artifact/org.apache.jackrabbit/jackrabbit-core
-	implementation group: 'org.apache.jackrabbit', name: 'jackrabbit-core', version: '2.22.0'
+// WebDAV Client 라이브러리
+// https://mvnrepository.com/artifact/org.apache.jackrabbit/oak-jackrabbit-api
+	implementation group: 'org.apache.jackrabbit', name: 'oak-jackrabbit-api', version: '1.72.0'
 
+// https://mvnrepository.com/artifact/org.apache.httpcomponents.client5/httpclient5
+	implementation group: 'org.apache.httpcomponents.client5', name: 'httpclient5', version: '5.4.1'
 	// https://mvnrepository.com/artifact/org.apache.jackrabbit/jackrabbit-webdav
-	implementation group: 'org.apache.jackrabbit', name: 'jackrabbit-webdav', version: '2.22.0'
+	implementation group: 'org.apache.jackrabbit', name: 'jackrabbit-webdav', version: '2.14.10'
+
+	implementation 'org.slf4j:slf4j-api:2.0.9'
+	implementation 'ch.qos.logback:logback-classic:1.4.11'
+
+
+
 
 
 
