@@ -1,55 +1,77 @@
 package com.fas.dentistry_data_analysis.util;
 
-import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.jackrabbit.webdav.DavException;
 import org.apache.jackrabbit.webdav.MultiStatus;
 import org.apache.jackrabbit.webdav.MultiStatusResponse;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.jackrabbit.webdav.client.methods.PropFindMethod;
+import org.apache.commons.httpclient.HttpClient;
+import org.apache.commons.httpclient.UsernamePasswordCredentials;
+import org.apache.commons.httpclient.HttpStatus;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 public class WebDavClient {
 
     public static void main(String[] args) {
-        // WebDAV 서버 URL 및 인증 정보
-        String serverUrl = "http://202.86.11.27:5000/volume1";  // 원하는 폴더 경로
+        // WebDAV 서버 URL 및 경로
+        String baseUrl = "http://202.86.11.27:5000/webdav";  // WebDAV 기본 경로
+        String folderPath = "치의학데이터 과제 데이터 수집/내부 데이터"; // 실제 폴더 이름
+        String serverUrl = baseUrl + "/" + encodePath(folderPath); // URL 인코딩된 경로
         String username = "dent_fas";  // Synology NAS 사용자 계정
         String password = "dent_fas123";  // Synology NAS 비밀번호
 
-        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+        System.out.println("WebDAV Client 실행 시작...");
+        System.out.println("서버 URL: " + serverUrl);
+        System.out.println("사용자 이름: " + username);
+        System.out.println("비밀번호: " + (password != null ? "********" : "null"));
 
-            // PropFindMethod로 WebDAV 요청을 보냄 (폴더 및 하위 파일 목록 요청)
-            PropFindMethod method = new PropFindMethod(serverUrl);  // DEPTH_1은 하위 폴더까지 조회
-            method.setDoAuthentication(true); // 인증 설정
-            method.setRequestHeader("Authorization", "Basic " + getBase64EncodedCredentials(username, password));
+        HttpClient client = new HttpClient();
+        client.getState().setCredentials(null, null, new UsernamePasswordCredentials(username, password));
 
-            // HTTP 요청 실행
-            httpClient.execute((HttpUriRequest) method);
+        // PropFindMethod 생성
+        PropFindMethod method = null;
+        try {
+            method = new PropFindMethod(serverUrl);
 
-            // 서버 응답 확인
-            if (method.getStatusCode() == 207) { // 207: WebDAV에서 여러 상태 응답
+            // Depth 헤더 설정
+            method.addRequestHeader("Depth", "1");
+
+            System.out.println("HTTP 요청 실행 중...");
+            int statusCode = client.executeMethod(method);
+
+            // HTTP 응답 코드 확인
+            System.out.println("HTTP 응답 코드: " + statusCode);
+
+            if (statusCode == HttpStatus.SC_MULTI_STATUS) { // 207: WebDAV에서 여러 상태 응답
                 MultiStatus multiStatus = method.getResponseBodyAsMultiStatus();
                 MultiStatusResponse[] responses = multiStatus.getResponses();
 
-                // 폴더 내 파일 목록 출력
-                for (MultiStatusResponse response : responses) {
-                    System.out.println("파일 경로: " + response.getHref());
-                    // 추가적인 메타데이터가 필요하면 출력 가능
+                System.out.println("응답 받은 파일/폴더 목록:");
+                for (MultiStatusResponse res : responses) {
+                    System.out.println("- 파일 경로: " + res.getHref());
                 }
             } else {
-                System.out.println("에러: " + method.getStatusCode());
+                System.out.println("에러 발생! HTTP 상태 코드: " + statusCode);
             }
-
         } catch (IOException | DavException e) {
+            System.out.println("WebDAV 요청 실패! URL 또는 권한을 확인하세요.");
             e.printStackTrace();
+        } finally {
+            if (method != null) {
+                method.releaseConnection(); // 연결 해제
+            }
+            System.out.println("WebDAV Client 종료.");
         }
     }
 
-    // 사용자 인증을 Base64로 인코딩하여 Authorization 헤더에 추가
-    private static String getBase64EncodedCredentials(String username, String password) {
-        String credentials = username + ":" + password;
-        return java.util.Base64.getEncoder().encodeToString(credentials.getBytes());
+    // 경로를 URL 인코딩
+    private static String encodePath(String path) {
+        try {
+            return URLEncoder.encode(path, StandardCharsets.UTF_8.toString()).replace("+", "%20");
+        } catch (Exception e) {
+            throw new RuntimeException("URL 인코딩 실패", e);
+        }
     }
 }
