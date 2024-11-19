@@ -55,7 +55,7 @@ dependencies {
 	implementation 'ch.qos.logback:logback-classic:1.4.11'
 
 
-
+	implementation 'com.jcraft:jsch:0.1.55'
 
 
 
