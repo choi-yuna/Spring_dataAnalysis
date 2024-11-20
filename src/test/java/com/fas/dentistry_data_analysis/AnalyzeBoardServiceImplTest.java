@@ -20,7 +20,7 @@ class AnalyzeBoardServiceImplTest {
     }
 
     @Test
-    void testProcessFilesInFolder() throws IOException {
+    void testProcessFilesInFolder() throws Exception {
         // 테스트용 폴더 경로 (테스트 디렉토리에 맞게 경로 수정 필요)
         String folderPath = "C:/Users/fasol/OneDrive/바탕 화면/BRM 701~800";
 

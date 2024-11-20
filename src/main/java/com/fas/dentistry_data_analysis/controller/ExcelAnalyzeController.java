@@ -18,7 +18,7 @@ import java.util.concurrent.ExecutionException;
 @RequestMapping("/api")
 public class ExcelAnalyzeController {
 
-    private final String folderPath = "C:/Users/fasol/OneDrive/바탕 화면/BRM 701~800";
+    private final String folderPath = "/치의학데이터 과제 데이터 수집/내부 데이터/BRM/치주질환";
 
 
   //  private final DataAnalysisService dataAnalysisService;
@@ -32,7 +32,7 @@ public class ExcelAnalyzeController {
     }
 
     @PostMapping("/dashboard")
-    public ResponseEntity<?> dashboardData() throws IOException {
+    public ResponseEntity<?> dashboardData() throws Exception {
         Map<String, Object>   stringObjectMap = analyzeBoardService.processFilesInFolder(folderPath);
         return ResponseEntity.ok(Map.of("data", stringObjectMap));
     }
