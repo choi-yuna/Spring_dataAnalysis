@@ -1,7 +1,7 @@
 package com.fas.dentistry_data_analysis.controller;
 
 import com.fas.dentistry_data_analysis.DTO.AnalysisRequestDTO;
-import com.fas.dentistry_data_analysis.service.AnalyzeBoardServiceImpl;
+import com.fas.dentistry_data_analysis.service.dashBoard.AnalyzeBoardServiceImpl;
 import com.fas.dentistry_data_analysis.service.AnalyzeDataService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
