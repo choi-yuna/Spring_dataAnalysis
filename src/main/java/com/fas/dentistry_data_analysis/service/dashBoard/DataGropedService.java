@@ -12,14 +12,16 @@ public class DataGropedService {
     // 질환별로 데이터를 그룹화하는 메소드
     public List<Map<String, Object>> groupDataByDisease(List<Map<String, Object>> resultList) {
         log.info("Starting to group data by disease. Number of entries: {}", resultList.size());
-        log.info("{}",resultList.get(0));
 
         Map<String, Map<String, Object>> groupedData = new HashMap<>();
+        Set<String> processedImageIds = new HashSet<>();  // IMAGE_ID 중복 체크
 
         for (Map<String, Object> item : resultList) {
             String diseaseClass = (String) item.get("DISEASE_CLASS");
             String institutionId = (String) item.get("INSTITUTION_ID");
+            String imageId = (String) item.get("IMAGE_ID");
 
+            // 질환별 데이터 그룹화
             if (!groupedData.containsKey(diseaseClass)) {
                 groupedData.put(diseaseClass, new HashMap<>());
             }
@@ -31,9 +33,18 @@ public class DataGropedService {
                 diseaseData.put("subData", new ArrayList<>());
             }
 
+            // 중복된 IMAGE_ID는 건너뜁니다.
+            if (processedImageIds.contains(imageId)) {
+                continue;
+            }
+
+            // IMAGE_ID를 처리한 것으로 표시
+            processedImageIds.add(imageId);
+
             // 총합 계산 (목표건수, 1차검수, 2차검수, 라벨링건수 등)
             List<Integer> totalData = (List<Integer>) diseaseData.get("totalData");
 
+            // 목표건수 증가
             int goalCount = (item.get("목표건수") != null) ? (int) item.get("목표건수") : 0;
             totalData.set(0, totalData.get(0) + goalCount);
 
@@ -64,15 +75,32 @@ public class DataGropedService {
             subRow.add(String.valueOf(dataCheck));
             subRow.add(String.valueOf(secondCheck));
 
-            // 43% 대신 실제 구축율 값 추가
+            // 실제 구축율 값 추가
             int buildRate = (int) totalData.get(5);
             subRow.add(buildRate + ""); // 구축율을 추가 (백분율)
 
+            // subData에 각 기관 정보 추가
             List<List<String>> subData = (List<List<String>>) diseaseData.get("subData");
-            subData.add(subRow);
+            boolean exists = false;
+            for (List<String> existingSubRow : subData) {
+                if (existingSubRow.get(0).equals(institutionId)) {
+                    // 같은 기관의 데이터를 합산
+                    existingSubRow.set(1, String.valueOf(Integer.parseInt(existingSubRow.get(1)) + goalCount));
+                    existingSubRow.set(2, String.valueOf(Integer.parseInt(existingSubRow.get(2)) + labelingCount));
+                    existingSubRow.set(3, String.valueOf(Integer.parseInt(existingSubRow.get(3)) + firstCheck));
+                    existingSubRow.set(4, String.valueOf(Integer.parseInt(existingSubRow.get(4)) + dataCheck));
+                    existingSubRow.set(5, String.valueOf(Integer.parseInt(existingSubRow.get(5)) + secondCheck));
+                    int existingBuildRate = Integer.parseInt(existingSubRow.get(5));
+                    existingSubRow.set(6, String.valueOf(existingBuildRate)); // 업데이트된 구축율
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                subData.add(subRow);
+            }
         }
 
-        log.info("Finished grouping by disease. Number of grouped diseases: {}", groupedData.size());
         return formatGroupedData(groupedData);
     }
 
@@ -80,11 +108,14 @@ public class DataGropedService {
         log.info("Starting to group data by institution. Number of entries: {}", resultList.size());
 
         Map<String, Map<String, Object>> groupedData = new HashMap<>();
+        Set<String> processedImageIds = new HashSet<>();  // IMAGE_ID 중복 체크
 
         for (Map<String, Object> item : resultList) {
-            String institutionId = (String) item.get("기관");
-            String diseaseClass = (String) item.get("질환");
+            String institutionId = (String) item.get("INSTITUTION_ID");
+            String diseaseClass = (String) item.get("DISEASE_CLASS");
+            String imageId = (String) item.get("IMAGE_ID");
 
+            // 기관별 데이터 그룹화
             if (!groupedData.containsKey(institutionId)) {
                 groupedData.put(institutionId, new HashMap<>());
             }
@@ -96,26 +127,30 @@ public class DataGropedService {
                 institutionData.put("subData", new ArrayList<>());
             }
 
+            // 중복된 IMAGE_ID는 건너뜁니다.
+            if (processedImageIds.contains(imageId)) {
+                continue;
+            }
+
+            // IMAGE_ID를 처리한 것으로 표시
+            processedImageIds.add(imageId);
+
             // 총합 계산 (목표건수, 1차검수, 2차검수, 라벨링건수 등)
             List<Integer> totalData = (List<Integer>) institutionData.get("totalData");
 
-            // "목표건수"가 null일 경우 0으로 설정
+            // 목표건수 증가
             int goalCount = (item.get("목표건수") != null) ? (int) item.get("목표건수") : 0;
             totalData.set(0, totalData.get(0) + goalCount);
 
-            // "라벨링건수"가 null일 경우 0으로 설정
             int labelingCount = (item.get("라벨링건수") != null) ? (int) item.get("라벨링건수") : 0;
             totalData.set(1, totalData.get(1) + labelingCount);
 
-            // "1차검수"가 null일 경우 0으로 설정
             int firstCheck = (item.get("1차검수") != null) ? (int) item.get("1차검수") : 0;
             totalData.set(2, totalData.get(2) + firstCheck);
 
-            // "데이터구성검수"가 null일 경우 0으로 설정
             int dataCheck = (item.get("데이터구성검수") != null) ? (int) item.get("데이터구성검수") : 0;
             totalData.set(3, totalData.get(3) + dataCheck);
 
-            // "2차검수"가 null일 경우 0으로 설정
             int secondCheck = (item.get("2차검수") != null) ? (int) item.get("2차검수") : 0;
             totalData.set(4, totalData.get(4) + secondCheck);
 
@@ -138,15 +173,47 @@ public class DataGropedService {
             int buildRate = (int) totalData.get(5);
             subRow.add(buildRate + ""); // 구축율을 추가 (백분율)
 
+            // subData에 각 질환 정보 추가
             List<List<String>> subData = (List<List<String>>) institutionData.get("subData");
-            subData.add(subRow);
+            boolean exists = false;
+            for (List<String> existingSubRow : subData) {
+                if (existingSubRow.get(0).equals(diseaseClass)) {
+                    // 같은 질환의 데이터를 합산
+                    existingSubRow.set(1, String.valueOf(Integer.parseInt(existingSubRow.get(1)) + goalCount));
+                    existingSubRow.set(2, String.valueOf(Integer.parseInt(existingSubRow.get(2)) + labelingCount));
+                    existingSubRow.set(3, String.valueOf(Integer.parseInt(existingSubRow.get(3)) + firstCheck));
+                    existingSubRow.set(4, String.valueOf(Integer.parseInt(existingSubRow.get(4)) + dataCheck));
+                    existingSubRow.set(5, String.valueOf(Integer.parseInt(existingSubRow.get(5)) + secondCheck));
+                    int existingBuildRate = Integer.parseInt(existingSubRow.get(5));
+                    existingSubRow.set(6, String.valueOf(existingBuildRate)); // 업데이트된 구축율
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                subData.add(subRow);
+            }
         }
 
-        log.info("Finished grouping by institution. Number of grouped institutions: {}", groupedData.size());
         return formatGroupedData(groupedData);
     }
 
-    // 질환 ALL 또는 기관 ALL 데이터를 생성하는 통합 메소드
+    // 그룹화된 데이터를 형식에 맞게 변환하는 메소드
+    public List<Map<String, Object>> formatGroupedData(Map<String, Map<String, Object>> groupedData) {
+        List<Map<String, Object>> formattedData = new ArrayList<>();
+        for (Map.Entry<String, Map<String, Object>> entry : groupedData.entrySet()) {
+            Map<String, Object> institutionOrDiseaseData = entry.getValue();
+            Map<String, Object> result = new HashMap<>();
+            result.put("title", institutionOrDiseaseData.get("title"));
+            result.put("totalData", institutionOrDiseaseData.get("totalData"));
+            result.put("subData", institutionOrDiseaseData.get("subData"));
+            formattedData.add(result);
+        }
+        return formattedData;
+    }
+
+
+// 질환 ALL 또는 기관 ALL 데이터를 생성하는 메소드
     public Map<String, Object> createAllData(List<Map<String, Object>> resultList, String groupingKey, String title) {
         log.info("Creating 'ALL' data for grouping key: {}", groupingKey);
 
@@ -233,17 +300,5 @@ public class DataGropedService {
         return allData;
     }
 
-    // 그룹화된 데이터를 형식에 맞게 변환하는 메소드
-    public List<Map<String, Object>> formatGroupedData(Map<String, Map<String, Object>> groupedData) {
-        List<Map<String, Object>> formattedData = new ArrayList<>();
-        for (Map.Entry<String, Map<String, Object>> entry : groupedData.entrySet()) {
-            Map<String, Object> institutionOrDiseaseData = entry.getValue();
-            Map<String, Object> result = new HashMap<>();
-            result.put("title", institutionOrDiseaseData.get("title"));
-            result.put("totalData", institutionOrDiseaseData.get("totalData"));
-            result.put("subData", institutionOrDiseaseData.get("subData"));
-            formattedData.add(result);
-        }
-        return formattedData;
-    }
+
 }
