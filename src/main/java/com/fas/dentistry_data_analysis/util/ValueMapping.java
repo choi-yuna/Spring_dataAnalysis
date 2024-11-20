@@ -48,6 +48,8 @@ public class ValueMapping {
         put("B", "골수염");
         put("C", "구강암");
         put("D", "두개안면");
+        put("E", "대조군 1");
+        put("F", "대조군 2");
     }};
 
     // 기관 ID 매핑
