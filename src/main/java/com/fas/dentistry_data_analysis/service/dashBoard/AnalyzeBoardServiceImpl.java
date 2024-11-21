@@ -196,28 +196,32 @@ public class AnalyzeBoardServiceImpl {
         long errorFilesCount = resultList.stream()
                 .filter(row -> "데이터구성검수".equals(row.get("status")))
                 .count();
+        long secondCheck = resultList.stream()
+                .filter(row -> "2차검수".equals(row.get("status")))
+                .count();
         String uploadDate = LocalDate.now().toString();
 
         List<Map<String, Object>> statuses = new ArrayList<>();
         Map<String, Object> totalFilesStatus = new HashMap<>();
-        totalFilesStatus.put("type", "총파일 수");
+        totalFilesStatus.put("totalFiles", "총파일 수");
         totalFilesStatus.put("fileCount", totalFilesCount);
         totalFilesStatus.put("uploadDate", uploadDate);
         totalFilesStatus.put("totalFilesCount", totalFilesCount);
         statuses.add(totalFilesStatus);
 
         Map<String, Object> errorFilesStatus = new HashMap<>();
-        errorFilesStatus.put("type", "오류 파일 수");
+        errorFilesStatus.put("totalFiles", "오류 파일 수");
         errorFilesStatus.put("fileCount", errorFilesCount);
         errorFilesStatus.put("uploadDate", uploadDate);
         errorFilesStatus.put("totalFilesCount", totalFilesCount);
         statuses.add(errorFilesStatus);
 
         Map<String, Object> builtRateStatus = new HashMap<>();
-        builtRateStatus.put("type", "구축율");
-        builtRateStatus.put("fileCount", totalFilesCount - errorFilesCount);
+        builtRateStatus.put("totalFiles", "구축율");
+        builtRateStatus.put("fileCount", secondCheck);
         builtRateStatus.put("uploadDate", uploadDate);
         builtRateStatus.put("totalFilesCount", totalFilesCount);
+        builtRateStatus.put("showGraph", "ture");
         statuses.add(builtRateStatus);
 
         Map<String, Object> dashboardData = new HashMap<>();
