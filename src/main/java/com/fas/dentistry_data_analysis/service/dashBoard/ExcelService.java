@@ -1,6 +1,7 @@
 package com.fas.dentistry_data_analysis.service.dashBoard;
 
 import com.fas.dentistry_data_analysis.util.ExcelUtils;
+import com.fas.dentistry_data_analysis.util.ValueMapping;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
@@ -68,14 +69,16 @@ public class ExcelService {
                         if (diseaseClassIndex != null) {
                             Cell diseaseClassCell = row.getCell(diseaseClassIndex);
                             String diseaseClassValue = (diseaseClassCell != null) ? ExcelUtils.getCellValueAsString(diseaseClassCell) : "";
-                            rowData.put("DISEASE_CLASS", diseaseClassValue);
+                            String mappedDiseaseClass = ValueMapping.getDiseaseClass(diseaseClassValue);
+                            rowData.put("DISEASE_CLASS", mappedDiseaseClass);
                         }
 
                         // INSTITUTION_ID 추출
                         if (institutionIdIndex != null) {
                             Cell institutionIdCell = row.getCell(institutionIdIndex);
                             String institutionIdValue = (institutionIdCell != null) ? ExcelUtils.getCellValueAsString(institutionIdCell) : "";
-                            rowData.put("INSTITUTION_ID", institutionIdValue);
+                            String mappedInstitutionId = ValueMapping.getInstitutionDescription(institutionIdValue);
+                            rowData.put("INSTITUTION_ID", mappedInstitutionId);
                         }
 
                         if (!rowData.isEmpty()) {

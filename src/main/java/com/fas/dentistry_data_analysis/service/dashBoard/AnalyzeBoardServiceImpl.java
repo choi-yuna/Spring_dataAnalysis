@@ -45,12 +45,12 @@ public class AnalyzeBoardServiceImpl {
 
         // 질환별 데이터 처리
         List<Map<String, Object>> diseaseData = dataGropedService.groupDataByDisease(resultList);
-        diseaseData.add(dataGropedService.createAllData(resultList, "질환", "질환 ALL"));  // 질환ALL 데이터 추가
+        diseaseData.add(dataGropedService.createAllData(resultList, "INSTITUTION_ID", "질환 ALL"));  // 질환ALL 데이터 추가
         response.put("질환별", diseaseData);
 
         // 기관별 데이터 처리
         List<Map<String, Object>> institutionData = dataGropedService.groupDataByInstitution(resultList);
-        institutionData.add(dataGropedService.createAllData(resultList, "기관", "기관 ALL"));  // 기관ALL 데이터 추가
+        institutionData.add(dataGropedService.createAllData(resultList, "DISEASE_CLASS", "기관 ALL"));  // 기관ALL 데이터 추가
         response.put("기관별", institutionData);
 
         return response;
@@ -93,11 +93,6 @@ public class AnalyzeBoardServiceImpl {
                         boolean dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm");
                         boolean jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling/meta");
                         boolean iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
-
-                        log.info("{}", dcmExists);
-                        log.info("{}", jsonExists);
-                        log.info("{}", iniExists);
-
                         // .dcm, .json, .ini 파일이 모두 존재하지 않으면 '데이터구성검수' 증가
                         if (!(dcmExists && jsonExists && iniExists)) {
                             incrementStatus(resultList, institutionId, diseaseClass, imageId, "데이터구성검수");
@@ -116,10 +111,7 @@ public class AnalyzeBoardServiceImpl {
                             jsonFileStream = SFTPClient.readFile(channelSftp, folderPath + "/Labelling/meta", imageId + ".json");
                             int secondCheckStatus = getJsonStatus(jsonFileStream, "Second_Check_Info", "2");
 
-                            log.info("라벨링{}",labelingStatus);
-                            log.info("1치검수{}",firstCheckStatus);
-                            log.info("2차검수{}",secondCheckStatus);
-
+                            log.info("라벨링{} 1치검수{} 2차검수{}",labelingStatus,firstCheckStatus, secondCheckStatus);
 
                             if (labelingStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링건수");
                             if (firstCheckStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "1차검수");
