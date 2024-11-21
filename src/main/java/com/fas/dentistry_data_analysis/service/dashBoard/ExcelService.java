@@ -77,6 +77,7 @@ public class ExcelService {
                         if (institutionIdIndex != null) {
                             Cell institutionIdCell = row.getCell(institutionIdIndex);
                             String institutionIdValue = (institutionIdCell != null) ? ExcelUtils.getCellValueAsString(institutionIdCell) : "";
+                            if (institutionIdValue == null || institutionIdValue.isEmpty()) {continue;}
                             String mappedInstitutionId = ValueMapping.getInstitutionDescription(institutionIdValue);
                             rowData.put("INSTITUTION_ID", mappedInstitutionId);
                         }

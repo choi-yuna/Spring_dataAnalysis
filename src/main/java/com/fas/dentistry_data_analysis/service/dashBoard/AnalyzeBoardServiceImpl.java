@@ -98,28 +98,41 @@ public class AnalyzeBoardServiceImpl {
                     String diseaseClass = (String) row.get("DISEASE_CLASS");
                     String institutionId = (String) row.get("INSTITUTION_ID");
 
-                    // 파일 존재 여부 확인
-                    boolean dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm");
-                    boolean jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling/meta");
-                    boolean iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
+                    boolean dcmExists = false;
+                    boolean iniExists = false;
+                    boolean jsonExists = false;
 
-                    if (!(dcmExists && jsonExists && iniExists)) {
-                        incrementStatus(resultList, institutionId, diseaseClass, imageId, "데이터구성검수");
-                    }
+                    if (folderPath.contains("구강암")) {
+                        log.info("Processed {} {}", imageId, folderPath);
+                        // 구강암 폴더에 맞는 파일 체크
+                        dcmExists = checkFileExistsInSFTPForImageId(channelSftp, folderPath, imageId);
+                        jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
+                        iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
 
-                    if (jsonExists) {
-                        InputStream jsonFileStream = SFTPClient.readFile(channelSftp, folderPath + "/Labelling/meta", imageId + ".json");
-                        int labelingStatus = getJsonStatus(jsonFileStream, "Labeling_Info", "완료");
+                        // 구강암 폴더일 경우 특정 파일들이 모두 존재하지 않으면 '데이터구성검수' 증가
+                        if (!(dcmExists && jsonExists && iniExists)) {
+                            incrementStatus(resultList, institutionId, diseaseClass, imageId, "데이터구성검수");
+                        }
 
-                        jsonFileStream = SFTPClient.readFile(channelSftp, folderPath + "/Labelling/meta", imageId + ".json");
-                        int firstCheckStatus = getJsonStatus(jsonFileStream, "First_Check_Info", "2");
+                        // jsonExists가 true일 때 JSON 파일 상태 체크
+                        if (jsonExists) {
+                            processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
+                        }
+                    } else {
+                        // 치주질환 폴더에 맞는 파일 체크
+                        dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm","");
+                        jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling/meta");
+                        iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
 
-                        jsonFileStream = SFTPClient.readFile(channelSftp, folderPath + "/Labelling/meta", imageId + ".json");
-                        int secondCheckStatus = getJsonStatus(jsonFileStream, "Second_Check_Info", "2");
+                        // .dcm, .json, .ini 파일이 모두 존재하지 않으면 '데이터구성검수' 증가
+                        if (!(dcmExists && jsonExists && iniExists)) {
+                            incrementStatus(resultList, institutionId, diseaseClass, imageId, "데이터구성검수");
+                        }
 
-                        if (labelingStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링건수");
-                        if (firstCheckStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "1차검수");
-                        if (secondCheckStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "2차검수");
+                        // jsonExists가 true일 때 JSON 파일 상태 체크
+                        if (jsonExists) {
+                            processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
+                        }
                     }
                 }
             }
@@ -131,6 +144,51 @@ public class AnalyzeBoardServiceImpl {
                 processFolderRecursively(channelSftp, folderPath + "/" + entry.getFilename(), resultList);
             }
         }
+    }
+    private boolean checkFileExistsInSFTPForImageId(ChannelSftp channelSftp, String folderPath, String imageId) throws SftpException {
+        // 폴더 내 모든 파일과 디렉터리 목록을 가져옵니다.
+        Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
+
+        // 해당 폴더 내에서 imageId를 포함한 폴더를 찾습니다
+        for (ChannelSftp.LsEntry entry : files) {
+            if (entry.getAttrs().isDir() && entry.getFilename().contains(imageId)) {  // imageId가 포함된 폴더 찾기
+                String targetFolderPath = folderPath + "/" + entry.getFilename();  // 해당 폴더 경로
+
+                // 해당 폴더 내에서 .dcm 확장자를 가진 파일이 하나라도 있는지 확인
+                Vector<ChannelSftp.LsEntry> subFiles = SFTPClient.listFiles(channelSftp, targetFolderPath);
+                for (ChannelSftp.LsEntry subEntry : subFiles) {
+                    if (subEntry.getFilename().endsWith(".dcm")) {
+                        return true;  // .dcm 파일이 하나라도 있으면 true 반환
+                    }
+                }
+            }
+        }
+
+        return false; // 해당 폴더 내에 .dcm 파일이 없으면 false 반환
+    }
+
+
+    private void processJsonFile(ChannelSftp channelSftp, String folderPath, String imageId, List<Map<String, Object>> resultList, String institutionId, String diseaseClass) throws Exception {
+        String jsonFilePath = folderPath + (folderPath.contains("구강암") ? "/Labelling/" : "/Labelling/meta/");
+        String labelingKey = (folderPath.contains("구강암") ? "Labeling_info" : "Labeling_Info");
+        String firstCheckKey = (folderPath.contains("구강암") ? "First_Check_info" : "First_Check_Info");
+        String secondCheckKey = (folderPath.contains("구강암") ? "Second_Check_info" : "Second_Check_Info");
+
+        // JSON 파일을 한 번만 읽음
+        InputStream jsonFileStream = SFTPClient.readFile(channelSftp, jsonFilePath, imageId + ".json");
+        int labelingStatus = getJsonStatus(jsonFileStream, labelingKey);
+
+        jsonFileStream = SFTPClient.readFile(channelSftp, jsonFilePath, imageId + ".json");
+        int firstCheckStatus = getJsonStatus(jsonFileStream, firstCheckKey);
+
+        jsonFileStream = SFTPClient.readFile(channelSftp, jsonFilePath, imageId + ".json");
+        int secondCheckStatus = getJsonStatus(jsonFileStream,secondCheckKey );
+
+        log.info("라벨링{} 1차검수{} 2차검수{}", labelingStatus, firstCheckStatus, secondCheckStatus);
+
+        if (labelingStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링건수");
+        if (firstCheckStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "1차검수");
+        if (secondCheckStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "2차검수");
     }
 
     private Map<String, Object> getDashboardData(List<Map<String, Object>> resultList) {
@@ -167,6 +225,7 @@ public class AnalyzeBoardServiceImpl {
         return dashboardData;
     }
 
+    // 중복된 IMAGE_ID를 처리하는 방식 개선
     private void incrementStatus(List<Map<String, Object>> resultList, String institutionId, String diseaseClass, String imageId, String status) {
         // IMAGE_ID, INSTITUTION_ID, DISEASE_CLASS를 기준으로 항목을 찾습니다.
         Optional<Map<String, Object>> existing = resultList.stream()
@@ -222,34 +281,6 @@ public class AnalyzeBoardServiceImpl {
         }
         statusMap.put(status, currentStatusValue + 1);
     }
-
-
-    // SFTP에서 파일 존재 여부 확인
-    private boolean checkFileExistsInSFTP(ChannelSftp channelSftp, String folderPath, String fileName) throws SftpException {
-        // 현재 폴더 내 파일 검색
-        Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
-
-        // 파일 존재 여부 확인
-        for (ChannelSftp.LsEntry entry : files) {
-            if (entry.getFilename().equals(fileName)) {
-                return true;
-            }
-        }
-
-        // 하위 폴더를 재귀적으로 탐색
-        for (ChannelSftp.LsEntry entry : files) {
-            if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
-                // 하위 폴더에서 파일을 찾도록 재귀 호출
-                boolean foundInSubfolder = checkFileExistsInSFTP(channelSftp, folderPath + "/" + entry.getFilename(), fileName);
-                if (foundInSubfolder) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
     // SFTP에서 파일 존재 여부 확인 (하위 폴더 경로 포함)
     private boolean checkFileExistsInSFTP(ChannelSftp channelSftp, String folderPath, String fileName, String subFolder) throws SftpException {
         // 하위 폴더 경로를 포함한 전체 경로로 파일을 찾음
@@ -267,50 +298,73 @@ public class AnalyzeBoardServiceImpl {
         return false;
     }
 
-    // JSON 파일에서 상태를 추출하는 메소드
-    private int getJsonStatus(InputStream jsonFileStream, String key, String targetValue) throws IOException {
+    private int getJsonStatus(InputStream jsonFileStream, String key) throws IOException {
         ObjectMapper objectMapper = new ObjectMapper();
         JsonNode rootNode = objectMapper.readTree(jsonFileStream);
-        JsonNode infoNode = rootNode.get(key);
-        log.debug("infoNode: {}", infoNode); // infoNode 자체가 null인지 확인
 
+        // Key에 대한 여러 가지 이름 변형을 처리
+        String[] possibleKeys = getPossibleKeysForKey(key);
 
-        if (infoNode != null && infoNode.isArray() && infoNode.size() > 0) {
-            JsonNode firstElement = infoNode.get(0);
+        // 각 key 이름 변형에 대해 처리
+        for (String possibleKey : possibleKeys) {
+            JsonNode infoNode = rootNode.get(possibleKey);
 
-            log.debug("Current key: " + key);
+            if (infoNode != null && infoNode.isArray() && infoNode.size() > 0) {
+                JsonNode firstElement = infoNode.get(0);
 
-            if (key.equals("Labeling_Info")) {
-                JsonNode labelingStatusNode = firstElement.get("Labelling");
-                if (labelingStatusNode != null && labelingStatusNode.asText().equals(targetValue)) {
-                    return 2;
-                }
-            }
-
-            if (key.equals("First_Check_Info")) {
-                JsonNode checkResultNode = firstElement.get("Checking1");
-                if (checkResultNode != null) {
-                    log.debug("First_Check_Info - Checking1: " + checkResultNode.asText());
-                    if (checkResultNode.asText().equals(targetValue)) {
+                // Labeling 상태 확인
+                if (possibleKey.equals("Labeling_Info") || possibleKey.equals("Labeling_info")) {
+                    JsonNode labelingStatusNode = getField(firstElement, "Labelling", "Labeling");
+                    if (labelingStatusNode != null &&
+                            (labelingStatusNode.asText().equals("2") || labelingStatusNode.asText().equals("완료"))) {
                         return 2;
                     }
-                } else {
-                    log.debug("First_Check_Info - Checking1 is null or missing");
                 }
-            }
 
-            if (key.equals("Second_Check_Info")) {
-                JsonNode checkResultNode = firstElement.get("Checking2");
-                if (checkResultNode != null) {
-                    log.debug("Second_Check_Info - Checking2: " + checkResultNode.asText());
-                    if (checkResultNode.asText().equals(targetValue)) {
+                // First_Check 상태 확인
+                if (possibleKey.equals("First_Check_Info") || possibleKey.equals("First_Check_info")) {
+                    JsonNode checkResultNode = getField(firstElement, "Checking1", "Checking_1");
+                    if (checkResultNode != null && checkResultNode.asText().equals("2")) {
                         return 2;
                     }
-                } else {
-                    log.debug("Second_Check_Info - Checking2 is null or missing");
+                }
+
+                // Second_Check 상태 확인
+                if (possibleKey.equals("Second_Check_Info") || possibleKey.equals("Second_Check_info")) {
+                    JsonNode checkResultNode = getField(firstElement, "Checking2", "Checking_2");
+                    if (checkResultNode != null && checkResultNode.asText().equals("2")) {
+                        return 2;
+                    }
                 }
             }
         }
+
         return 0;
     }
+
+    // key에 따라 두 가지 필드를 반환하는 메서드
+    private JsonNode getField(JsonNode node, String key1, String key2) {
+        // 첫 번째 키부터 시도하고, 없으면 두 번째 키를 시도
+        JsonNode fieldNode = node.get(key1);
+        if (fieldNode == null) {
+            fieldNode = node.get(key2);
+        }
+        return fieldNode;
+    }
+
+    private String[] getPossibleKeysForKey(String key) {
+        // 각 key에 대해 가능한 이름 변형을 반환
+        switch (key) {
+            case "Labeling_Info":
+                return new String[]{"Labeling_Info", "Labeling_info"};
+            case "First_Check_Info":
+                return new String[]{"First_Check_Info", "First_Check_info"};
+            case "Second_Check_Info":
+                return new String[]{"Second_Check_Info", "Second_Check_info"};
+            default:
+                return new String[]{key};  // 기본적으로 동일한 이름 사용
+        }
+    }
+
+
 }
