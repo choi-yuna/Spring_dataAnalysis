@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.LocalDate;
 import java.util.*;
 
 @Slf4j
@@ -37,8 +38,21 @@ public class AnalyzeBoardServiceImpl {
         // 결과를 저장할 리스트 (기관과 질환을 포함한 모든 항목이 리스트에 저장됩니다)
         List<Map<String, Object>> resultList = new ArrayList<>();
 
-        // SFTP 연결하여 폴더 내 모든 .xlsx 파일 처리
-        processFolderRecursively(folderPath, resultList);
+        // SFTP 연결을 한 번 열고 모든 처리를 마친 뒤 닫습니다.
+        Session session = null;
+        ChannelSftp channelSftp = null;
+        try {
+            session = SFTPClient.createSession(SFTP_HOST, SFTP_USER, SFTP_PASSWORD, SFTP_PORT);
+            channelSftp = SFTPClient.createSftpChannel(session);
+
+            // SFTP 연결된 상태에서 폴더 내 파일 처리
+            processFolderRecursively(channelSftp, folderPath, resultList);
+        } finally {
+            // SFTP 연결 종료
+            if (channelSftp != null) channelSftp.disconnect();
+            if (session != null) session.disconnect();
+            log.info("SFTP connection closed");
+        }
 
         // 질환별 데이터와 기관별 데이터를 각각 처리
         Map<String, Object> response = new HashMap<>();
@@ -53,92 +67,104 @@ public class AnalyzeBoardServiceImpl {
         institutionData.add(dataGropedService.createAllData(resultList, "DISEASE_CLASS", "기관 ALL"));  // 기관ALL 데이터 추가
         response.put("기관별", institutionData);
 
+        // 대시보드 데이터를 추가
+        response.put("대시보드", getDashboardData(resultList));
+
         return response;
     }
 
-    private void processFolderRecursively(String folderPath, List<Map<String, Object>> resultList) throws Exception {
+    private void processFolderRecursively(ChannelSftp channelSftp, String folderPath, List<Map<String, Object>> resultList) throws Exception {
         log.info("Processing folder: {}", folderPath);
 
-        ChannelSftp channelSftp = null;
-        Session session = null;
+        // 폴더 내 모든 .xlsx 파일 목록을 가져옵니다.
+        Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
+        log.info("Found {} files in folder: {}", files.size(), folderPath);
 
-        try {
-            // SFTP 연결
-            session = SFTPClient.createSession(SFTP_HOST, SFTP_USER, SFTP_PASSWORD, SFTP_PORT);
-            channelSftp = SFTPClient.createSftpChannel(session);
+        // .xlsx 파일만 처리
+        for (ChannelSftp.LsEntry entry : files) {
+            String fileName = entry.getFilename();
+            if (fileName.endsWith(".xlsx")) {
+                log.info("Processing file: {}", fileName);
+                InputStream inputStream = SFTPClient.readFile(channelSftp, folderPath, fileName);
 
-            // 폴더 내 모든 .xlsx 파일 목록을 가져옵니다.
-            Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
-            log.info("Found {} files in folder", files.size());
+                // 엑셀 파일 처리
+                List<Map<String, Object>> filteredData = excelService.processExcelFile(inputStream);
+                resultList.addAll(filteredData);
+                log.info("Processed {} rows from file: {}", filteredData.size(), fileName);
 
-            // .xlsx 파일만 처리
-            for (ChannelSftp.LsEntry entry : files) {
-                String fileName = entry.getFilename();
-                if (fileName.endsWith(".xlsx")) {
-                    log.info("Processing file: {}", fileName);
-                    InputStream inputStream = SFTPClient.readFile(channelSftp, folderPath, fileName);
+                // 상태 업데이트
+                for (Map<String, Object> row : filteredData) {
+                    String imageId = (String) row.get("IMAGE_ID");
+                    String diseaseClass = (String) row.get("DISEASE_CLASS");
+                    String institutionId = (String) row.get("INSTITUTION_ID");
 
-                    // 엑셀 파일 처리
-                    List<Map<String, Object>> filteredData = excelService.processExcelFile(inputStream);
-                    resultList.addAll(filteredData);
-                    log.info("Processed {} rows from file: {}", filteredData.size(), fileName);
+                    // 파일 존재 여부 확인
+                    boolean dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm");
+                    boolean jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling/meta");
+                    boolean iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
 
-                    // 엑셀에서 가져온 데이터를 기반으로 institutionId와 diseaseClass를 추출하여 상태 업데이트
-                    for (Map<String, Object> row : filteredData) {
-                        String imageId = (String) row.get("IMAGE_ID");
-                        String diseaseClass = (String) row.get("DISEASE_CLASS");
-                        String institutionId = (String) row.get("INSTITUTION_ID");
+                    if (!(dcmExists && jsonExists && iniExists)) {
+                        incrementStatus(resultList, institutionId, diseaseClass, imageId, "데이터구성검수");
+                    }
 
+                    if (jsonExists) {
+                        InputStream jsonFileStream = SFTPClient.readFile(channelSftp, folderPath + "/Labelling/meta", imageId + ".json");
+                        int labelingStatus = getJsonStatus(jsonFileStream, "Labeling_Info", "완료");
 
+                        jsonFileStream = SFTPClient.readFile(channelSftp, folderPath + "/Labelling/meta", imageId + ".json");
+                        int firstCheckStatus = getJsonStatus(jsonFileStream, "First_Check_Info", "2");
 
-                        // 이미지 ID를 기반으로 .dcm, .json, .ini 파일 존재 여부 체크
-                        boolean dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm");
-                        boolean jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling/meta");
-                        boolean iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
-                        // .dcm, .json, .ini 파일이 모두 존재하지 않으면 '데이터구성검수' 증가
-                        if (!(dcmExists && jsonExists && iniExists)) {
-                            incrementStatus(resultList, institutionId, diseaseClass, imageId, "데이터구성검수");
-                        }
+                        jsonFileStream = SFTPClient.readFile(channelSftp, folderPath + "/Labelling/meta", imageId + ".json");
+                        int secondCheckStatus = getJsonStatus(jsonFileStream, "Second_Check_Info", "2");
 
-                        // jsonExists가 true일 때 JSON 파일 상태 체크
-                        if (jsonExists) {
-                            log.info("{}", folderPath);
-                            // 예시: 각 호출마다 새로 InputStream을 읽어 처리
-                            InputStream jsonFileStream = SFTPClient.readFile(channelSftp, folderPath + "/Labelling/meta", imageId + ".json");
-                            int labelingStatus = getJsonStatus(jsonFileStream, "Labeling_Info", "완료");
-
-                            jsonFileStream = SFTPClient.readFile(channelSftp, folderPath + "/Labelling/meta", imageId + ".json");
-                            int firstCheckStatus = getJsonStatus(jsonFileStream, "First_Check_Info", "2");
-
-                            jsonFileStream = SFTPClient.readFile(channelSftp, folderPath + "/Labelling/meta", imageId + ".json");
-                            int secondCheckStatus = getJsonStatus(jsonFileStream, "Second_Check_Info", "2");
-
-                            log.info("라벨링{} 1치검수{} 2차검수{}",labelingStatus,firstCheckStatus, secondCheckStatus);
-
-                            if (labelingStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링건수");
-                            if (firstCheckStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "1차검수");
-                            if (secondCheckStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "2차검수");
-                        }
+                        if (labelingStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링건수");
+                        if (firstCheckStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "1차검수");
+                        if (secondCheckStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "2차검수");
                     }
                 }
             }
-
-            // 하위 폴더 재귀 호출
-            for (ChannelSftp.LsEntry entry : files) {
-                if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
-                    processFolderRecursively(folderPath + "/" + entry.getFilename(), resultList);
-                }
-            }
-
-        } catch (JSchException | SftpException e) {
-            log.error("Error processing SFTP files", e);
-            throw new Exception("SFTP 연결 또는 파일 처리 오류");
-        } finally {
-            // SFTP 연결 종료
-            if (channelSftp != null) channelSftp.disconnect();
-            if (session != null) session.disconnect();
-            log.info("SFTP connection closed");
         }
+
+        // 하위 폴더 재귀 호출
+        for (ChannelSftp.LsEntry entry : files) {
+            if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
+                processFolderRecursively(channelSftp, folderPath + "/" + entry.getFilename(), resultList);
+            }
+        }
+    }
+
+    private Map<String, Object> getDashboardData(List<Map<String, Object>> resultList) {
+        int totalFilesCount = resultList.size();
+        long errorFilesCount = resultList.stream()
+                .filter(row -> "데이터구성검수".equals(row.get("status")))
+                .count();
+        String uploadDate = LocalDate.now().toString();
+
+        List<Map<String, Object>> statuses = new ArrayList<>();
+        Map<String, Object> totalFilesStatus = new HashMap<>();
+        totalFilesStatus.put("type", "총파일 수");
+        totalFilesStatus.put("fileCount", totalFilesCount);
+        totalFilesStatus.put("uploadDate", uploadDate);
+        totalFilesStatus.put("totalFilesCount", totalFilesCount);
+        statuses.add(totalFilesStatus);
+
+        Map<String, Object> errorFilesStatus = new HashMap<>();
+        errorFilesStatus.put("type", "오류 파일 수");
+        errorFilesStatus.put("fileCount", errorFilesCount);
+        errorFilesStatus.put("uploadDate", uploadDate);
+        errorFilesStatus.put("totalFilesCount", totalFilesCount);
+        statuses.add(errorFilesStatus);
+
+        Map<String, Object> builtRateStatus = new HashMap<>();
+        builtRateStatus.put("type", "구축율");
+        builtRateStatus.put("fileCount", totalFilesCount - errorFilesCount);
+        builtRateStatus.put("uploadDate", uploadDate);
+        builtRateStatus.put("totalFilesCount", totalFilesCount);
+        statuses.add(builtRateStatus);
+
+        Map<String, Object> dashboardData = new HashMap<>();
+        dashboardData.put("statuses", statuses);
+        return dashboardData;
     }
 
     private void incrementStatus(List<Map<String, Object>> resultList, String institutionId, String diseaseClass, String imageId, String status) {
