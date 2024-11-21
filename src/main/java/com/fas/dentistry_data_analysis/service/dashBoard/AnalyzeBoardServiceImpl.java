@@ -89,6 +89,8 @@ public class AnalyzeBoardServiceImpl {
                         String diseaseClass = (String) row.get("DISEASE_CLASS");
                         String institutionId = (String) row.get("INSTITUTION_ID");
 
+
+
                         // 이미지 ID를 기반으로 .dcm, .json, .ini 파일 존재 여부 체크
                         boolean dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm");
                         boolean jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling/meta");
@@ -140,7 +142,7 @@ public class AnalyzeBoardServiceImpl {
     }
 
     private void incrementStatus(List<Map<String, Object>> resultList, String institutionId, String diseaseClass, String imageId, String status) {
-        // IMAGE_ID를 기준으로 항목을 찾습니다.
+        // IMAGE_ID, INSTITUTION_ID, DISEASE_CLASS를 기준으로 항목을 찾습니다.
         Optional<Map<String, Object>> existing = resultList.stream()
                 .filter(item -> imageId.equals(item.get("IMAGE_ID")) && institutionId.equals(item.get("INSTITUTION_ID")) && diseaseClass.equals(item.get("DISEASE_CLASS")))
                 .findFirst();
@@ -151,27 +153,46 @@ public class AnalyzeBoardServiceImpl {
             newEntry.put("IMAGE_ID", imageId);
             newEntry.put("INSTITUTION_ID", institutionId);
             newEntry.put("DISEASE_CLASS", diseaseClass);
-            newEntry.put("목표건수", 1);  // 처음 등장할 때는 목표건수를 1로 설정
+            newEntry.put("목표건수", 0);  // 목표건수는 나중에 계산
             newEntry.put("라벨링건수", 0);
             newEntry.put("1차검수", 0);
             newEntry.put("데이터구성검수", 0);
             newEntry.put("2차검수", 0);
+            newEntry.put("목표건수_증가", false);  // 목표건수 증가 여부를 초기값 false로 설정
             resultList.add(newEntry);
             existing = Optional.of(newEntry);
-        } else {
-            // 기존 항목이 있다면 목표건수를 증가시킵니다.
-            Map<String, Object> statusMap = existing.get();
-            Integer currentGoalCount = (Integer) statusMap.get("목표건수");
-            statusMap.put("목표건수", (currentGoalCount != null) ? currentGoalCount + 1 : 1);  // 목표건수를 증가시킵니다.
         }
 
-        // 해당 항목을 찾아 상태값을 증가시킵니다.
         Map<String, Object> statusMap = existing.get();
 
-        // 기존 값이 null일 경우 0으로 초기화 후 증가
+        // 목표건수 증가 여부 체크 (Boolean 값을 null이 아닌 기본값인 false로 처리)
+        boolean incrementGoalCount = false;
+
+        // 상태 값이 "라벨링건수", "1차검수", "2차검수"일 때 한 번만 목표건수를 증가시키도록 처리
+        if ("라벨링건수".equals(status) && !(Boolean) statusMap.getOrDefault("목표건수_증가", false)) {
+            incrementGoalCount = true;
+        }
+        if ("1차검수".equals(status) && !(Boolean) statusMap.getOrDefault("목표건수_증가", false)) {
+            incrementGoalCount = true;
+        }
+        if ("2차검수".equals(status) && !(Boolean) statusMap.getOrDefault("목표건수_증가", false)) {
+            incrementGoalCount = true;
+        }
+
+        // 목표건수 증가 여부가 true일 경우에만 목표건수를 증가시킴
+        if (incrementGoalCount) {
+            Integer currentGoalCount = (Integer) statusMap.get("목표건수");
+            if (currentGoalCount == null) {
+                currentGoalCount = 0;
+            }
+            statusMap.put("목표건수", currentGoalCount + 1);  // 목표건수 증가
+            statusMap.put("목표건수_증가", true);  // 목표건수 증가 여부 표시
+        }
+
+        // 각 상태별 카운트 (라벨링건수, 1차검수, 2차검수) 증가
         Integer currentStatusValue = (Integer) statusMap.get(status);
         if (currentStatusValue == null) {
-            currentStatusValue = 0;  // 기본값 0 설정
+            currentStatusValue = 0;
         }
         statusMap.put(status, currentStatusValue + 1);
     }
