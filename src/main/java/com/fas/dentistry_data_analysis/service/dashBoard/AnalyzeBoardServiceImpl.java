@@ -112,14 +112,16 @@ public class AnalyzeBoardServiceImpl {
                         // .dcm, .json, .ini 파일이 모두 존재하지 않으면 '데이터구성검수' 증가
                         if (!(dcmExists && jsonExists && iniExists)) {
                             incrementStatus(resultList, institutionId, diseaseClass, imageId, "데이터구성검수");
+
+                        }
+                        else {
+                            // jsonExists가 true일 때 JSON 파일 상태 체크
+                            if (jsonExists) {
+                                processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
+                            }
                         }
 
-                        // jsonExists가 true일 때 JSON 파일 상태 체크
-                        if (jsonExists) {
-                            processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
-                        }
                     } else {
-
 
                         dcmExists = checkFileExistsInSFTPForImageId(channelSftp, folderPath, imageId);
                         jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
@@ -129,11 +131,13 @@ public class AnalyzeBoardServiceImpl {
                         if (!(dcmExists && jsonExists && iniExists)) {
                             incrementStatus(resultList, institutionId, diseaseClass, imageId, "데이터구성검수");
                         }
-
-                        // jsonExists가 true일 때 JSON 파일 상태 체크
-                        if (jsonExists) {
-                            processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
+                        else {
+                            // jsonExists가 true일 때 JSON 파일 상태 체크
+                            if (jsonExists) {
+                                processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
+                            }
                         }
+
                     }
                 }
             }
@@ -171,6 +175,8 @@ public class AnalyzeBoardServiceImpl {
 
 
     private void processJsonFile(ChannelSftp channelSftp, String folderPath, String imageId, List<Map<String, Object>> resultList, String institutionId, String diseaseClass) throws Exception {
+
+
         String jsonFilePath = folderPath + (folderPath.contains("치주질환") ? "/Labelling/meta/" :"/Labelling/" );
         String labelingKey = (folderPath.contains("치주질환") ?  "Labeling_Info" : "Labeling_info" );
         String firstCheckKey = (folderPath.contains("치주질환") ? "First_Check_Info" :"First_Check_info");
@@ -239,7 +245,8 @@ public class AnalyzeBoardServiceImpl {
     private void incrementStatus(List<Map<String, Object>> resultList, String institutionId, String diseaseClass, String imageId, String status) {
         // IMAGE_ID, INSTITUTION_ID, DISEASE_CLASS를 기준으로 항목을 찾습니다.
         Optional<Map<String, Object>> existing = resultList.stream()
-                .filter(item -> imageId.equals(item.get("IMAGE_ID")) && institutionId.equals(item.get("INSTITUTION_ID")) && diseaseClass.equals(item.get("DISEASE_CLASS")))
+                .filter(item -> imageId.equals(item.get("IMAGE_ID")) && institutionId.equals(item.get("INSTITUTION_ID"))
+                        && (diseaseClass != null && diseaseClass.equals(item.get("DISEASE_CLASS"))))  // null 체크 추가
                 .findFirst();
 
         // 해당 항목이 없다면 새로 추가합니다.
@@ -247,7 +254,7 @@ public class AnalyzeBoardServiceImpl {
             Map<String, Object> newEntry = new HashMap<>();
             newEntry.put("IMAGE_ID", imageId);
             newEntry.put("INSTITUTION_ID", institutionId);
-            newEntry.put("DISEASE_CLASS", diseaseClass);
+            newEntry.put("DISEASE_CLASS", diseaseClass);  // diseaseClass 값도 추가
             newEntry.put("목표건수", 0);  // 목표건수는 나중에 계산
             newEntry.put("라벨링건수", 0);
             newEntry.put("1차검수", 0);
@@ -273,6 +280,9 @@ public class AnalyzeBoardServiceImpl {
         if ("2차검수".equals(status) && !(Boolean) statusMap.getOrDefault("목표건수_증가", false)) {
             incrementGoalCount = true;
         }
+        if("데이터구성검수".equals(status) && !(Boolean) statusMap.getOrDefault("목표건수_증가", false)){
+            incrementGoalCount = true;
+        }
 
         // 목표건수 증가 여부가 true일 경우에만 목표건수를 증가시킴
         if (incrementGoalCount) {
@@ -292,22 +302,31 @@ public class AnalyzeBoardServiceImpl {
         statusMap.put(status, currentStatusValue + 1);
     }
 
+
     // SFTP에서 파일 존재 여부 확인 (하위 폴더 경로 포함)
     private boolean checkFileExistsInSFTP(ChannelSftp channelSftp, String folderPath, String fileName, String subFolder) throws SftpException {
         // 하위 폴더 경로를 포함한 전체 경로로 파일을 찾음
         String targetPath = folderPath + subFolder;
 
-        Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, targetPath);
+        try {
+            // 디렉토리 내의 파일 목록을 가져옴
+            Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, targetPath);
 
-        // 파일 존재 여부 확인
-        for (ChannelSftp.LsEntry entry : files) {
-            if (entry.getFilename().equals(fileName)) {
-                return true;
+            // 파일 존재 여부 확인
+            for (ChannelSftp.LsEntry entry : files) {
+                if (entry.getFilename().equals(fileName)) {
+                    return true; // 파일을 찾으면 true 반환
+                }
             }
+        } catch (SftpException e) {
+            // 예외가 발생하면 (즉, 해당 경로가 없으면) false 반환
+            log.warn("Directory or file not found: {}", targetPath);
+            return false;
         }
 
-        return false;
+        return false; // 파일이 존재하지 않으면 false 반환
     }
+
 
     private int getJsonStatus(JsonNode rootNode, String key) {
         // Key에 대한 여러 가지 이름 변형을 처리
