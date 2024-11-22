@@ -102,14 +102,14 @@ public class AnalyzeBoardServiceImpl {
                     boolean iniExists = false;
                     boolean jsonExists = false;
 
-                    if (folderPath.contains("구강암")) {
+                    if (folderPath.contains("치주질환")) {
                         log.info("Processed {} {}", imageId, folderPath);
-                        // 구강암 폴더에 맞는 파일 체크
-                        dcmExists = checkFileExistsInSFTPForImageId(channelSftp, folderPath, imageId);
-                        jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
+                        // 치주질환 폴더에 맞는 파일 체크
+                        dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm", "");
+                        jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling/meta");
                         iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
 
-                        // 구강암 폴더일 경우 특정 파일들이 모두 존재하지 않으면 '데이터구성검수' 증가
+                        // .dcm, .json, .ini 파일이 모두 존재하지 않으면 '데이터구성검수' 증가
                         if (!(dcmExists && jsonExists && iniExists)) {
                             incrementStatus(resultList, institutionId, diseaseClass, imageId, "데이터구성검수");
                         }
@@ -119,12 +119,13 @@ public class AnalyzeBoardServiceImpl {
                             processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
                         }
                     } else {
-                        // 치주질환 폴더에 맞는 파일 체크
-                        dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm","");
-                        jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling/meta");
+
+
+                        dcmExists = checkFileExistsInSFTPForImageId(channelSftp, folderPath, imageId);
+                        jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
                         iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
 
-                        // .dcm, .json, .ini 파일이 모두 존재하지 않으면 '데이터구성검수' 증가
+                        // 구강암 폴더일 경우 특정 파일들이 모두 존재하지 않으면 '데이터구성검수' 증가
                         if (!(dcmExists && jsonExists && iniExists)) {
                             incrementStatus(resultList, institutionId, diseaseClass, imageId, "데이터구성검수");
                         }
@@ -145,6 +146,7 @@ public class AnalyzeBoardServiceImpl {
             }
         }
     }
+
     private boolean checkFileExistsInSFTPForImageId(ChannelSftp channelSftp, String folderPath, String imageId) throws SftpException {
         // 폴더 내 모든 파일과 디렉터리 목록을 가져옵니다.
         Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
@@ -169,27 +171,31 @@ public class AnalyzeBoardServiceImpl {
 
 
     private void processJsonFile(ChannelSftp channelSftp, String folderPath, String imageId, List<Map<String, Object>> resultList, String institutionId, String diseaseClass) throws Exception {
-        String jsonFilePath = folderPath + (folderPath.contains("구강암") ? "/Labelling/" : "/Labelling/meta/");
-        String labelingKey = (folderPath.contains("구강암") ? "Labeling_info" : "Labeling_Info");
-        String firstCheckKey = (folderPath.contains("구강암") ? "First_Check_info" : "First_Check_Info");
-        String secondCheckKey = (folderPath.contains("구강암") ? "Second_Check_info" : "Second_Check_Info");
+        String jsonFilePath = folderPath + (folderPath.contains("치주질환") ? "/Labelling/meta/" :"/Labelling/" );
+        String labelingKey = (folderPath.contains("치주질환") ?  "Labeling_Info" : "Labeling_info" );
+        String firstCheckKey = (folderPath.contains("치주질환") ? "First_Check_Info" :"First_Check_info");
+        String secondCheckKey = (folderPath.contains("치주질환") ? "Second_Check_Info": "Second_Check_info" );
 
         // JSON 파일을 한 번만 읽음
         InputStream jsonFileStream = SFTPClient.readFile(channelSftp, jsonFilePath, imageId + ".json");
-        int labelingStatus = getJsonStatus(jsonFileStream, labelingKey);
 
-        jsonFileStream = SFTPClient.readFile(channelSftp, jsonFilePath, imageId + ".json");
-        int firstCheckStatus = getJsonStatus(jsonFileStream, firstCheckKey);
+        // JSON 파일을 한 번만 읽고 필요한 데이터를 모두 추출
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode rootNode = objectMapper.readTree(jsonFileStream);
 
-        jsonFileStream = SFTPClient.readFile(channelSftp, jsonFilePath, imageId + ".json");
-        int secondCheckStatus = getJsonStatus(jsonFileStream,secondCheckKey );
+        // 각 상태를 한 번에 추출
+        int labelingStatus = getJsonStatus(rootNode, labelingKey);
+        int firstCheckStatus = getJsonStatus(rootNode, firstCheckKey);
+        int secondCheckStatus = getJsonStatus(rootNode, secondCheckKey);
 
         log.info("라벨링{} 1차검수{} 2차검수{}", labelingStatus, firstCheckStatus, secondCheckStatus);
 
+        // 상태에 따라 결과 리스트에 상태 증가 처리
         if (labelingStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링건수");
         if (firstCheckStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "1차검수");
         if (secondCheckStatus == 2) incrementStatus(resultList, institutionId, diseaseClass, imageId, "2차검수");
     }
+
 
     private Map<String, Object> getDashboardData(List<Map<String, Object>> resultList) {
         int totalFilesCount = resultList.size();
@@ -285,6 +291,7 @@ public class AnalyzeBoardServiceImpl {
         }
         statusMap.put(status, currentStatusValue + 1);
     }
+
     // SFTP에서 파일 존재 여부 확인 (하위 폴더 경로 포함)
     private boolean checkFileExistsInSFTP(ChannelSftp channelSftp, String folderPath, String fileName, String subFolder) throws SftpException {
         // 하위 폴더 경로를 포함한 전체 경로로 파일을 찾음
@@ -302,10 +309,7 @@ public class AnalyzeBoardServiceImpl {
         return false;
     }
 
-    private int getJsonStatus(InputStream jsonFileStream, String key) throws IOException {
-        ObjectMapper objectMapper = new ObjectMapper();
-        JsonNode rootNode = objectMapper.readTree(jsonFileStream);
-
+    private int getJsonStatus(JsonNode rootNode, String key) {
         // Key에 대한 여러 가지 이름 변형을 처리
         String[] possibleKeys = getPossibleKeysForKey(key);
 
@@ -369,6 +373,4 @@ public class AnalyzeBoardServiceImpl {
                 return new String[]{key};  // 기본적으로 동일한 이름 사용
         }
     }
-
-
 }
