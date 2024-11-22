@@ -69,6 +69,7 @@ public class ExcelService {
                         if (diseaseClassIndex != null) {
                             Cell diseaseClassCell = row.getCell(diseaseClassIndex);
                             String diseaseClassValue = (diseaseClassCell != null) ? ExcelUtils.getCellValueAsString(diseaseClassCell) : "";
+                            if (diseaseClassValue == null || diseaseClassValue.isEmpty()) {continue;}
                             String mappedDiseaseClass = ValueMapping.getDiseaseClass(diseaseClassValue);
                             rowData.put("DISEASE_CLASS", mappedDiseaseClass);
                         }
