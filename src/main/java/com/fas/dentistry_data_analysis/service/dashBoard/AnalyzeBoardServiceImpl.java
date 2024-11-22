@@ -320,7 +320,6 @@ public class AnalyzeBoardServiceImpl {
             }
         } catch (SftpException e) {
             // 예외가 발생하면 (즉, 해당 경로가 없으면) false 반환
-            log.warn("Directory or file not found: {}", targetPath);
             return false;
         }
 
