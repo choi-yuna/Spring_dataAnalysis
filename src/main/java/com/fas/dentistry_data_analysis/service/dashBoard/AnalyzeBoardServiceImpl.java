@@ -62,8 +62,18 @@ public class AnalyzeBoardServiceImpl {
         response.put("질환별", diseaseData);
 
         List<Map<String, Object>> institutionData = dataGropedService.groupDataByInstitution(resultList);
-        institutionData.add(dataGropedService.createAllData(resultList, "DISEASE_CLASS", "기관 ALL"));
+
+        if (institutionData == null) {
+            institutionData = new ArrayList<>();
+        }
+
+        Map<String, Object> allData = dataGropedService.createAllData(resultList, "DISEASE_CLASS", "기관 ALL");
+        if (allData != null) {
+            institutionData.add(allData);
+        }
         response.put("기관별", institutionData);
+
+
 
         response.put("대시보드", getDashboardData(resultList));
 
@@ -148,7 +158,11 @@ public class AnalyzeBoardServiceImpl {
             // 상태 업데이트
             String diseaseClass = (String) row.get("DISEASE_CLASS");
             String institutionId = (String) row.get("INSTITUTION_ID");
-
+            // Null 체크 추가
+            if (institutionId == null) {
+                log.warn("Institution ID is null for row: {}", row);
+                continue; // null 데이터를 건너뜁니다.
+            }
             // 질환별 폴더 처리 (치주질환의 경우 다른 경로)
             boolean dcmExists = false;
             boolean jsonExists = false;
@@ -207,36 +221,56 @@ public class AnalyzeBoardServiceImpl {
     }
 
     private void processJsonFile(ChannelSftp channelSftp, String folderPath, String imageId, List<Map<String, Object>> resultList, String institutionId, String diseaseClass) throws Exception {
+        log.info("=== Start processJsonFile ===");
+        log.info("Folder path: {}", folderPath);
+        log.info("Processing JSON for Image ID: {}", imageId);
+
         // JSON 파일 경로 설정
         String jsonFilePath = folderPath + (folderPath.contains("치주질환") ? "/Labelling/meta/" : "/Labelling/");
         String labelingKey = folderPath.contains("치주질환") ? "Labeling_Info" : "Labeling_info";
         String firstCheckKey = folderPath.contains("치주질환") ? "First_Check_Info" : "First_Check_info";
         String secondCheckKey = folderPath.contains("치주질환") ? "Second_Check_Info" : "Second_Check_info";
 
-        // JSON 파일을 한 번만 읽음
-        InputStream jsonFileStream = SFTPClient.readFile(channelSftp, jsonFilePath, imageId + ".json");
+        log.info("JSON File Path: {}", jsonFilePath);
+        log.info("Keys: LabelingKey={}, FirstCheckKey={}, SecondCheckKey={}", labelingKey, firstCheckKey, secondCheckKey);
 
-        // ObjectMapper 사용하여 JSON 파싱
-        ObjectMapper objectMapper = new ObjectMapper();
-        JsonNode rootNode = objectMapper.readTree(jsonFileStream);
+        try (InputStream jsonFileStream = SFTPClient.readFile(channelSftp, jsonFilePath, imageId + ".json")) {
+            log.info("JSON file read successfully for {}", imageId);
 
-        // 각 상태를 한 번에 추출
-        boolean labelingStatus = getJsonStatus(rootNode, labelingKey) == 2;
-        boolean firstCheckStatus = getJsonStatus(rootNode, firstCheckKey) == 2;
-        boolean secondCheckStatus = getJsonStatus(rootNode, secondCheckKey) == 2;
+            // ObjectMapper 사용하여 JSON 파싱
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode rootNode = objectMapper.readTree(jsonFileStream);
 
-        // 상태가 2인 경우에만 처리
-        if (labelingStatus) {
-            incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링건수");
+            // 디버깅용 JSON 노드 출력
+            log.debug("Root Node: {}", rootNode.toString());
+
+            // 상태 추출
+            boolean labelingStatus = getJsonStatus(rootNode, labelingKey) == 2;
+            boolean firstCheckStatus = getJsonStatus(rootNode, firstCheckKey) == 2;
+            boolean secondCheckStatus = getJsonStatus(rootNode, secondCheckKey) == 2;
+
+            log.info("Statuses - Labeling: {}, FirstCheck: {}, SecondCheck: {}", labelingStatus, firstCheckStatus, secondCheckStatus);
+
+            // 상태가 2인 경우에만 처리
+            if (labelingStatus) {
+                incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링건수");
+                log.info("Incremented 라벨링건수 for {}", imageId);
+            }
+            if (firstCheckStatus) {
+                incrementStatus(resultList, institutionId, diseaseClass, imageId, "1차검수");
+                log.info("Incremented 1차검수 for {}", imageId);
+            }
+            if (secondCheckStatus) {
+                incrementStatus(resultList, institutionId, diseaseClass, imageId, "2차검수");
+                log.info("Incremented 2차검수 for {}", imageId);
+            }
+        } catch (Exception e) {
+            log.error("Error while processing JSON file for Image ID: {}", imageId, e);
         }
-        if (firstCheckStatus) {
-            incrementStatus(resultList, institutionId, diseaseClass, imageId, "1차검수");
-        }
-        if (secondCheckStatus) {
-            incrementStatus(resultList, institutionId, diseaseClass, imageId, "2차검수");
-        }
+        log.info("=== End processJsonFile ===");
     }
-private Map<String, Object> getDashboardData(List<Map<String, Object>> resultList) {
+
+    private Map<String, Object> getDashboardData(List<Map<String, Object>> resultList) {
         int totalFilesCount = resultList.size();
         long errorFilesCount = resultList.stream()
                 .filter(row -> "데이터구성검수".equals(row.get("status")))
