@@ -148,7 +148,6 @@ public class AnalyzeBoardServiceImpl {
 
             // 이미 처리된 imageId는 건너뛰기
             if (processedImageIds.contains(imageId)) {
-                log.info("Skipping already processed imageId: {}", imageId);
                 continue;
             }
 
@@ -185,7 +184,7 @@ public class AnalyzeBoardServiceImpl {
                 incrementStatus(resultList, institutionId, diseaseClass, imageId, "데이터구성검수");
             } else {
                 // 중복된 IMAGE_ID는 jsonExists가 true일 경우에도 처리하지 않도록
-                if (jsonExists && !processedImageIds.contains(imageId)) {
+                if (jsonExists ) {
                     processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
                 }
             }
@@ -273,12 +272,19 @@ public class AnalyzeBoardServiceImpl {
     private Map<String, Object> getDashboardData(List<Map<String, Object>> resultList) {
         int totalFilesCount = resultList.size();
         long errorFilesCount = resultList.stream()
-                .filter(row -> "데이터구성검수".equals(row.get("status")))
+                .filter(row -> row.containsKey("데이터구성검수") && (Integer) row.get("데이터구성검수") > 0)  // 데이터구성검수 값이 0 이상일 경우
                 .count();
+
         long secondCheck = resultList.stream()
                 .filter(row -> "2차검수".equals(row.get("status")))
                 .count();
         String uploadDate = LocalDate.now().toString();
+        resultList.forEach(row -> {
+            row.forEach((key, value) -> {
+                log.info("Key: {}, Value: {}", key, value);
+            });
+        });
+
 
         List<Map<String, Object>> statuses = new ArrayList<>();
         Map<String, Object> totalFilesStatus = new HashMap<>();
