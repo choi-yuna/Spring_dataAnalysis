@@ -44,7 +44,6 @@ public class ExcelService {
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
         }
 
-        log.info("Processed {} rows from Excel file", filteredData.size());
         return filteredData;
     }
 

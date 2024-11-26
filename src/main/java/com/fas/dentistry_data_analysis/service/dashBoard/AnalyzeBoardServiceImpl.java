@@ -30,11 +30,13 @@ public class AnalyzeBoardServiceImpl {
     private final DataGropedService dataGropedService;
     private final ExcelService excelService;
 
-    // 생성자에서 executorService를 주입받음
+    private final ExecutorService executorService = Executors.newFixedThreadPool(2 * Runtime.getRuntime().availableProcessors());
+
     public AnalyzeBoardServiceImpl(DataGropedService dataGropedService, ExcelService excelService) {
         this.dataGropedService = dataGropedService;
         this.excelService = excelService;
     }
+
 
     public Map<String, Object> processFilesInFolder(String folderPath) throws Exception {
         List<Map<String, Object>> resultList = new ArrayList<>();
@@ -63,6 +65,20 @@ public class AnalyzeBoardServiceImpl {
 
         List<Map<String, Object>> institutionData = dataGropedService.groupDataByInstitution(resultList);
 
+        Set<String> uniqueImageIds = new HashSet<>();
+        int nullCount = 0;  // null값 확인용 카운트
+
+// resultList 순회하면서 IMAGE_ID를 Set에 추가
+        for (Map<String, Object> row : resultList) {
+            String imageId = (String) row.get("IMAGE_ID");
+
+            // null값을 확인하고 카운트
+            if (imageId == null) {
+                nullCount++;
+            } else {
+                uniqueImageIds.add(imageId);
+            }
+        }
         if (institutionData == null) {
             institutionData = new ArrayList<>();
         }
@@ -87,17 +103,15 @@ public class AnalyzeBoardServiceImpl {
 
         // ExecutorService 생성 (파일을 병렬로 처리하기 위해)
         int availableCores = Runtime.getRuntime().availableProcessors();
+
         ExecutorService executorService = Executors.newFixedThreadPool(availableCores);
 
         List<CompletableFuture<Void>> futures = new ArrayList<>();
-
-        // AtomicBoolean 사용하여 하위 폴더 탐색 여부 제어
-        AtomicBoolean stopSubfolderSearch = new AtomicBoolean(false);
+        AtomicBoolean stopSubfolderSearch = new AtomicBoolean(false); // 하위 폴더 탐색을 제어
 
         for (ChannelSftp.LsEntry entry : files) {
             String fileName = entry.getFilename();
             if (fileName.endsWith(".xlsx")) {
-                // 이미 처리된 파일인지 확인
                 synchronized (processedImageIds) {
                     if (processedImageIds.contains(fileName)) {
                         continue;  // 이미 처리된 파일은 건너뜀
@@ -109,34 +123,41 @@ public class AnalyzeBoardServiceImpl {
                 futures.add(CompletableFuture.runAsync(() -> {
                     try {
                         processFile(channelSftp, folderPath, fileName, resultList, processedImageIds, stopSubfolderSearch);
-                        // processFile 처리 완료 후 하위 폴더 탐색 중지
                     } catch (Exception e) {
                         log.error("Error processing file: {}", fileName, e);
                     }
                 }, executorService));
+
+                // 엑셀 파일을 처리한 후에는 하위 폴더 탐색을 중지하고 바로 다음 폴더로 넘어감
+                stopSubfolderSearch.set(true);  // 하위 폴더 탐색 중지
+                break;  // 엑셀 파일을 처리했으므로, 추가적으로 하위 폴더를 탐색할 필요가 없습니다.
             }
         }
 
         // 모든 파일 처리 완료까지 기다림
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
-        // 하위 폴더 탐색 (stopSubfolderSearch가 false일 경우에만 실행)
+        // 수정된 코드
         if (!stopSubfolderSearch.get()) {
+            // 여기서만 하위 폴더 탐색을 진행합니다.
             for (ChannelSftp.LsEntry entry : files) {
                 if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
                     String subFolderPath = folderPath + "/" + entry.getFilename();
-                    // 하위 폴더가 필요한 경우에만 재귀 호출
-                    processFolderRecursively(channelSftp, subFolderPath, resultList, processedImageIds);
+                    // 하위 폴더 탐색을 진행하려면 stopSubfolderSearch가 false여야만 실행
+                    if (!stopSubfolderSearch.get()) {
+                        processFolderRecursively(channelSftp, subFolderPath, resultList, processedImageIds);  // 하위 폴더 탐색
+                    }
                 }
             }
         }
+
 
         // Executor 종료
         executorService.shutdown();
     }
 
+
     private void processFile(ChannelSftp channelSftp, String folderPath, String fileName, List<Map<String, Object>> resultList, Set<String> processedImageIds, AtomicBoolean stopSubfolderSearch) throws Exception {
-        log.info("Processing file: {}", fileName);
         InputStream inputStream = SFTPClient.readFile(channelSftp, folderPath, fileName);
 
         // 엑셀 파일 처리
@@ -157,18 +178,16 @@ public class AnalyzeBoardServiceImpl {
             // 상태 업데이트
             String diseaseClass = (String) row.get("DISEASE_CLASS");
             String institutionId = (String) row.get("INSTITUTION_ID");
-            // Null 체크 추가
             if (institutionId == null) {
-                log.warn("Institution ID is null for row: {}", row);
                 continue; // null 데이터를 건너뜁니다.
             }
-            // 질환별 폴더 처리 (치주질환의 경우 다른 경로)
+
+            // 파일 존재 여부를 확인하는 부분 (치주질환 폴더 확인)
             boolean dcmExists = false;
             boolean jsonExists = false;
             boolean iniExists = false;
 
             if (folderPath.contains("치주질환")) {
-                log.info("Processed {} {}", imageId, folderPath);
                 dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm", "");
                 jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling/meta");
                 iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
@@ -180,30 +199,30 @@ public class AnalyzeBoardServiceImpl {
 
             // 파일 존재 여부에 따라 상태 업데이트
             if (!(dcmExists && jsonExists && iniExists)) {
-                // 중복된 IMAGE_ID가 아니라면 "데이터구성검수"만 증가시키기
                 incrementStatus(resultList, institutionId, diseaseClass, imageId, "데이터구성검수");
+                stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
             } else {
-                // 중복된 IMAGE_ID는 jsonExists가 true일 경우에도 처리하지 않도록
-                if (jsonExists ) {
+                if (jsonExists) {
                     processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
                 }
+                stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
             }
         }
 
-        log.info("Processed {} rows from file: {}", filteredData.size(), fileName);
-        // 하위 폴더 탐색을 중지하는 조건 추가
-        stopSubfolderSearch.set(true);  // 이 파일을 처리했으면 하위 폴더 탐색을 더 이상 진행하지 않음
     }
 
 
 
+
+
     private boolean checkFileExistsInSFTPForImageId(ChannelSftp channelSftp, String folderPath, String imageId) throws SftpException {
-        // 폴더 내 모든 파일과 디렉터리 목록을 가져옵니다.
+        // 지정된 경로(folderPath) 내에서만 파일과 폴더를 검색합니다.
         Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
 
-        // 해당 폴더 내에서 imageId를 포함한 폴더를 찾습니다
+        // 주어진 경로에서 imageId와 일치하는 폴더를 찾습니다
         for (ChannelSftp.LsEntry entry : files) {
-            if (entry.getAttrs().isDir() && entry.getFilename().contains(imageId)) {  // imageId가 포함된 폴더 찾기
+            // 폴더 이름에 imageId가 포함된 경우
+            if (entry.getAttrs().isDir() && entry.getFilename().contains(imageId)) {
                 String targetFolderPath = folderPath + "/" + entry.getFilename();  // 해당 폴더 경로
 
                 // 해당 폴더 내에서 .dcm 확장자를 가진 파일이 하나라도 있는지 확인
@@ -213,16 +232,16 @@ public class AnalyzeBoardServiceImpl {
                         return true;  // .dcm 파일이 하나라도 있으면 true 반환
                     }
                 }
+
+                // .dcm 파일을 찾지 못한 경우 false 반환
+                return false;
             }
         }
 
-        return false; // 해당 폴더 내에 .dcm 파일이 없으면 false 반환
+        // 주어진 경로 내에서 imageId를 포함하는 폴더가 없으면 false 반환
+        return false;
     }
-
     private void processJsonFile(ChannelSftp channelSftp, String folderPath, String imageId, List<Map<String, Object>> resultList, String institutionId, String diseaseClass) throws Exception {
-        log.info("=== Start processJsonFile ===");
-        log.info("Folder path: {}", folderPath);
-        log.info("Processing JSON for Image ID: {}", imageId);
 
         // JSON 파일 경로 설정
         String jsonFilePath = folderPath + (folderPath.contains("치주질환") ? "/Labelling/meta/" : "/Labelling/");
@@ -230,43 +249,33 @@ public class AnalyzeBoardServiceImpl {
         String firstCheckKey = folderPath.contains("치주질환") ? "First_Check_Info" : "First_Check_info";
         String secondCheckKey = folderPath.contains("치주질환") ? "Second_Check_Info" : "Second_Check_info";
 
-        log.info("JSON File Path: {}", jsonFilePath);
-        log.info("Keys: LabelingKey={}, FirstCheckKey={}, SecondCheckKey={}", labelingKey, firstCheckKey, secondCheckKey);
 
         try (InputStream jsonFileStream = SFTPClient.readFile(channelSftp, jsonFilePath, imageId + ".json")) {
-            log.info("JSON file read successfully for {}", imageId);
 
             // ObjectMapper 사용하여 JSON 파싱
             ObjectMapper objectMapper = new ObjectMapper();
             JsonNode rootNode = objectMapper.readTree(jsonFileStream);
 
-            // 디버깅용 JSON 노드 출력
-            log.debug("Root Node: {}", rootNode.toString());
 
             // 상태 추출
             boolean labelingStatus = getJsonStatus(rootNode, labelingKey) == 2;
             boolean firstCheckStatus = getJsonStatus(rootNode, firstCheckKey) == 2;
             boolean secondCheckStatus = getJsonStatus(rootNode, secondCheckKey) == 2;
 
-            log.info("Statuses - Labeling: {}, FirstCheck: {}, SecondCheck: {}", labelingStatus, firstCheckStatus, secondCheckStatus);
 
             // 상태가 2인 경우에만 처리
             if (labelingStatus) {
                 incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링건수");
-                log.info("Incremented 라벨링건수 for {}", imageId);
             }
             if (firstCheckStatus) {
                 incrementStatus(resultList, institutionId, diseaseClass, imageId, "1차검수");
-                log.info("Incremented 1차검수 for {}", imageId);
             }
             if (secondCheckStatus) {
                 incrementStatus(resultList, institutionId, diseaseClass, imageId, "2차검수");
-                log.info("Incremented 2차검수 for {}", imageId);
             }
         } catch (Exception e) {
             log.error("Error while processing JSON file for Image ID: {}", imageId, e);
         }
-        log.info("=== End processJsonFile ===");
     }
 
     private Map<String, Object> getDashboardData(List<Map<String, Object>> resultList) {
@@ -279,12 +288,6 @@ public class AnalyzeBoardServiceImpl {
                 .filter(row -> "2차검수".equals(row.get("status")))
                 .count();
         String uploadDate = LocalDate.now().toString();
-        resultList.forEach(row -> {
-            row.forEach((key, value) -> {
-                log.info("Key: {}, Value: {}", key, value);
-            });
-        });
-
 
         List<Map<String, Object>> statuses = new ArrayList<>();
         Map<String, Object> totalFilesStatus = new HashMap<>();
@@ -375,39 +378,28 @@ public class AnalyzeBoardServiceImpl {
     }
 
 
-    // SFTP에서 파일 존재 여부 확인 (하위 폴더 경로 포함)
-// 캐시를 저장하는 Map
-    private final Map<String, Set<String>> fileCache = new HashMap<>();
+    private final Map<String, Set<String>> folderFileCache = new ConcurrentHashMap<>();
 
-// SFTP에서 파일 존재 여부 확인 (하위 폴더 경로 포함)
     private boolean checkFileExistsInSFTP(ChannelSftp channelSftp, String folderPath, String fileName, String subFolder) throws SftpException {
-        // 하위 폴더 경로를 포함한 전체 경로로 파일을 찾음
         String targetPath = folderPath + subFolder;
 
-        // 캐시에서 파일 목록을 가져오거나, 캐시에 없는 경우 새로 가져옴
-        Set<String> cachedFiles = fileCache.get(targetPath);
-        if (cachedFiles == null) {
-            // 캐시에 없으면 SFTP 서버에서 파일 목록을 가져옵니다.
+        Set<String> cachedFiles = folderFileCache.computeIfAbsent(targetPath, path -> {
             try {
                 Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, targetPath);
-                cachedFiles = new HashSet<>();
+                Set<String> fileNames = new HashSet<>();
                 for (ChannelSftp.LsEntry entry : files) {
-                    cachedFiles.add(entry.getFilename());
+                    fileNames.add(entry.getFilename());
                 }
-                // 파일 목록을 캐시에 저장
-                fileCache.put(targetPath, cachedFiles);
+                return fileNames;
             } catch (SftpException e) {
-                // 해당 폴더가 존재하지 않으면 false 반환
-                if (e.id == ChannelSftp.SSH_FX_NO_SUCH_FILE) {
-                    return false;
-                }
-                throw e;  // 다른 예외는 다시 던지기
+                // 파일 목록을 가져오는 데 실패한 경우
+                return Collections.emptySet();
             }
-        }
+        });
 
-        // 캐시에서 해당 파일이 있는지 확인
         return cachedFiles.contains(fileName);
     }
+
 
 
     // 여러 파일의 존재 여부를 한 번에 확인 (하위 폴더 포함)

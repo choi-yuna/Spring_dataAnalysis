@@ -51,9 +51,6 @@ dependencies {
 	// https://mvnrepository.com/artifact/org.apache.jackrabbit/jackrabbit-webdav
 	implementation group: 'org.apache.jackrabbit', name: 'jackrabbit-webdav', version: '2.14.10'
 
-	implementation 'org.slf4j:slf4j-api:2.0.9'
-	implementation 'ch.qos.logback:logback-classic:1.4.11'
-
 
 	implementation 'com.jcraft:jsch:0.1.55'
 
