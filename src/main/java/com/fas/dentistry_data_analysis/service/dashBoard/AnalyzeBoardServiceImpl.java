@@ -59,16 +59,23 @@ public class AnalyzeBoardServiceImpl {
         }
 
         Map<String, Object> response = new HashMap<>();
-        List<Map<String, Object>> diseaseData = dataGropedService.groupDataByDisease(resultList);
+
+// "질환 ALL" 데이터 먼저 추가
+        List<Map<String, Object>> diseaseData = new ArrayList<>();
         diseaseData.add(dataGropedService.createAllData(resultList, "INSTITUTION_ID", "질환 ALL"));
+        diseaseData.addAll(dataGropedService.groupDataByDisease(resultList));  // 그룹화된 데이터 추가
         response.put("질환별", diseaseData);
 
-        List<Map<String, Object>> institutionData = dataGropedService.groupDataByInstitution(resultList);
+// "기관 ALL" 데이터 먼저 추가
+        List<Map<String, Object>> institutionData = new ArrayList<>();
+        institutionData.add(dataGropedService.createAllData(resultList, "DISEASE_CLASS", "기관 ALL"));
+        institutionData.addAll(dataGropedService.groupDataByInstitution(resultList));  // 그룹화된 데이터 추가
+        response.put("기관별", institutionData);
 
+// 중복 체크를 위한 IMAGE_ID 처리
         Set<String> uniqueImageIds = new HashSet<>();
         int nullCount = 0;  // null값 확인용 카운트
 
-// resultList 순회하면서 IMAGE_ID를 Set에 추가
         for (Map<String, Object> row : resultList) {
             String imageId = (String) row.get("IMAGE_ID");
 
@@ -79,21 +86,12 @@ public class AnalyzeBoardServiceImpl {
                 uniqueImageIds.add(imageId);
             }
         }
-        if (institutionData == null) {
-            institutionData = new ArrayList<>();
-        }
 
-        Map<String, Object> allData = dataGropedService.createAllData(resultList, "DISEASE_CLASS", "기관 ALL");
-        if (allData != null) {
-            institutionData.add(allData);
-        }
-        response.put("기관별", institutionData);
-
-
-
+// 대시보드 데이터 추가
         response.put("대시보드", getDashboardData(resultList));
 
         return response;
+
     }
 
     private void processFolderRecursively(ChannelSftp channelSftp, String folderPath, List<Map<String, Object>> resultList, Set<String> processedImageIds) throws Exception {
