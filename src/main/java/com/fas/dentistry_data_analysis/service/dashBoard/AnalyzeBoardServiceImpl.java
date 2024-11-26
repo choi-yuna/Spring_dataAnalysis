@@ -87,8 +87,6 @@ public class AnalyzeBoardServiceImpl {
             }
         }
 
-// 대시보드 데이터 추가
-        response.put("대시보드", getDashboardData(resultList));
 
         return response;
 
@@ -141,6 +139,9 @@ public class AnalyzeBoardServiceImpl {
             for (ChannelSftp.LsEntry entry : files) {
                 if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
                     String subFolderPath = folderPath + "/" + entry.getFilename();
+                    if (subFolderPath.contains("/Labelling/Labelling")) {
+                        continue;
+                    }
                     // 하위 폴더 탐색을 진행하려면 stopSubfolderSearch가 false여야만 실행
                     if (!stopSubfolderSearch.get()) {
                         processFolderRecursively(channelSftp, subFolderPath, resultList, processedImageIds);  // 하위 폴더 탐색
@@ -274,45 +275,6 @@ public class AnalyzeBoardServiceImpl {
         } catch (Exception e) {
             log.error("Error while processing JSON file for Image ID: {}", imageId, e);
         }
-    }
-
-    private Map<String, Object> getDashboardData(List<Map<String, Object>> resultList) {
-        int totalFilesCount = resultList.size();
-        long errorFilesCount = resultList.stream()
-                .filter(row -> row.containsKey("데이터구성검수") && (Integer) row.get("데이터구성검수") > 0)  // 데이터구성검수 값이 0 이상일 경우
-                .count();
-
-        long secondCheck = resultList.stream()
-                .filter(row -> "2차검수".equals(row.get("status")))
-                .count();
-        String uploadDate = LocalDate.now().toString();
-
-        List<Map<String, Object>> statuses = new ArrayList<>();
-        Map<String, Object> totalFilesStatus = new HashMap<>();
-        totalFilesStatus.put("totalFiles", "총파일 수");
-        totalFilesStatus.put("fileCount", totalFilesCount);
-        totalFilesStatus.put("uploadDate", uploadDate);
-        totalFilesStatus.put("totalFilesCount", totalFilesCount);
-        statuses.add(totalFilesStatus);
-
-        Map<String, Object> errorFilesStatus = new HashMap<>();
-        errorFilesStatus.put("totalFiles", "오류 파일 수");
-        errorFilesStatus.put("fileCount", errorFilesCount);
-        errorFilesStatus.put("uploadDate", uploadDate);
-        errorFilesStatus.put("totalFilesCount", totalFilesCount);
-        statuses.add(errorFilesStatus);
-
-        Map<String, Object> builtRateStatus = new HashMap<>();
-        builtRateStatus.put("totalFiles", "구축율");
-        builtRateStatus.put("fileCount", secondCheck);
-        builtRateStatus.put("uploadDate", uploadDate);
-        builtRateStatus.put("totalFilesCount", totalFilesCount);
-        builtRateStatus.put("showGraph", "ture");
-        statuses.add(builtRateStatus);
-
-        Map<String, Object> dashboardData = new HashMap<>();
-        dashboardData.put("statuses", statuses);
-        return dashboardData;
     }
 
     // 중복된 IMAGE_ID를 처리하는 방식 개선
