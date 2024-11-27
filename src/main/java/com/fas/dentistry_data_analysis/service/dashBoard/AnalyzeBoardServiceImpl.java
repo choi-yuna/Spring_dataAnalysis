@@ -52,6 +52,9 @@ public class AnalyzeBoardServiceImpl {
 
             // 폴더 내 파일을 병렬로 처리
             processFolderRecursively(channelSftp, folderPath, resultList, processedImageIds);
+
+            // 결과 리스트의 상태를 로그로 찍기
+            log.info("Processed resultList: {}", resultList);
         } finally {
             if (channelSftp != null) channelSftp.disconnect();
             if (session != null) session.disconnect();
@@ -60,19 +63,19 @@ public class AnalyzeBoardServiceImpl {
 
         Map<String, Object> response = new HashMap<>();
 
-// "질환 ALL" 데이터 먼저 추가
+        // "질환 ALL" 데이터 먼저 추가
         List<Map<String, Object>> diseaseData = new ArrayList<>();
         diseaseData.add(dataGropedService.createAllData(resultList, "INSTITUTION_ID", "질환 ALL"));
         diseaseData.addAll(dataGropedService.groupDataByDisease(resultList));  // 그룹화된 데이터 추가
         response.put("질환별", diseaseData);
 
-// "기관 ALL" 데이터 먼저 추가
+        // "기관 ALL" 데이터 먼저 추가
         List<Map<String, Object>> institutionData = new ArrayList<>();
         institutionData.add(dataGropedService.createAllData(resultList, "DISEASE_CLASS", "기관 ALL"));
         institutionData.addAll(dataGropedService.groupDataByInstitution(resultList));  // 그룹화된 데이터 추가
         response.put("기관별", institutionData);
 
-// 중복 체크를 위한 IMAGE_ID 처리
+        // 중복 체크를 위한 IMAGE_ID 처리
         Set<String> uniqueImageIds = new HashSet<>();
         int nullCount = 0;  // null값 확인용 카운트
 
@@ -87,9 +90,11 @@ public class AnalyzeBoardServiceImpl {
             }
         }
 
+        // 중복된 IMAGE_ID의 수와 null count를 로그로 찍기
+        log.info("Total number of unique image IDs: {}", uniqueImageIds.size());
+        log.info("Number of null image IDs: {}", nullCount);
 
         return response;
-
     }
 
     private void processFolderRecursively(ChannelSftp channelSftp, String folderPath, List<Map<String, Object>> resultList, Set<String> processedImageIds) throws Exception {
