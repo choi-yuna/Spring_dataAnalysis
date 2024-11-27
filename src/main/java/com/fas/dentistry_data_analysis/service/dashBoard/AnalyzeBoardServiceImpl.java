@@ -1,5 +1,6 @@
 package com.fas.dentistry_data_analysis.service.dashBoard;
 
+import com.fas.dentistry_data_analysis.service.FolderMetadataService;
 import com.fas.dentistry_data_analysis.util.SFTPClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,6 +9,7 @@ import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.SftpException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -29,22 +31,27 @@ public class AnalyzeBoardServiceImpl {
 
     private final DataGropedService dataGropedService;
     private final ExcelService excelService;
-
+    private final FolderMetadataService folderMetadataService;
     private final ExecutorService executorService = Executors.newFixedThreadPool(2 * Runtime.getRuntime().availableProcessors());
 
-    public AnalyzeBoardServiceImpl(DataGropedService dataGropedService, ExcelService excelService) {
+    @Autowired
+    public AnalyzeBoardServiceImpl(DataGropedService dataGropedService, ExcelService excelService, FolderMetadataService folderMetadataService) {
         this.dataGropedService = dataGropedService;
         this.excelService = excelService;
+        this.folderMetadataService = folderMetadataService;
     }
 
 
-    public Map<String, Object> processFilesInFolder(String folderPath) throws Exception {
-        List<Map<String, Object>> resultList = new ArrayList<>();
 
+    public Map<String, Object> processFilesInFolder(String folderPath) throws Exception {
+        // 이미 분석된 폴더인지 확인
+
+        List<Map<String, Object>> resultList = new ArrayList<>();
         Session session = null;
         ChannelSftp channelSftp = null;
+
         // 중복 처리용 전역 Set
-        Set<String> processedImageIds = new HashSet<>();  // 여기에 중복된 ID를 저장합니다.
+        Set<String> processedImageIds = new HashSet<>(); // 여기에 중복된 ID를 저장
 
         try {
             session = SFTPClient.createSession(SFTP_HOST, SFTP_USER, SFTP_PASSWORD, SFTP_PORT);
@@ -60,21 +67,21 @@ public class AnalyzeBoardServiceImpl {
 
         Map<String, Object> response = new HashMap<>();
 
-// "질환 ALL" 데이터 먼저 추가
+        // "질환 ALL" 데이터 먼저 추가
         List<Map<String, Object>> diseaseData = new ArrayList<>();
         diseaseData.add(dataGropedService.createAllData(resultList, "INSTITUTION_ID", "질환 ALL"));
-        diseaseData.addAll(dataGropedService.groupDataByDisease(resultList));  // 그룹화된 데이터 추가
+        diseaseData.addAll(dataGropedService.groupDataByDisease(resultList)); // 그룹화된 데이터 추가
         response.put("질환별", diseaseData);
 
-// "기관 ALL" 데이터 먼저 추가
+        // "기관 ALL" 데이터 먼저 추가
         List<Map<String, Object>> institutionData = new ArrayList<>();
         institutionData.add(dataGropedService.createAllData(resultList, "DISEASE_CLASS", "기관 ALL"));
-        institutionData.addAll(dataGropedService.groupDataByInstitution(resultList));  // 그룹화된 데이터 추가
+        institutionData.addAll(dataGropedService.groupDataByInstitution(resultList)); // 그룹화된 데이터 추가
         response.put("기관별", institutionData);
 
-// 중복 체크를 위한 IMAGE_ID 처리
+        // 중복 체크를 위한 IMAGE_ID 처리
         Set<String> uniqueImageIds = new HashSet<>();
-        int nullCount = 0;  // null값 확인용 카운트
+        int nullCount = 0; // null값 확인용 카운트
 
         for (Map<String, Object> row : resultList) {
             String imageId = (String) row.get("IMAGE_ID");
@@ -86,75 +93,66 @@ public class AnalyzeBoardServiceImpl {
                 uniqueImageIds.add(imageId);
             }
         }
-
-
         return response;
-
     }
 
     private void processFolderRecursively(ChannelSftp channelSftp, String folderPath, List<Map<String, Object>> resultList, Set<String> processedImageIds) throws Exception {
-        // 폴더 내 모든 .xlsx 파일 목록을 가져옵니다.
+        // 현재 폴더가 처리되었는지 확인
+        if (folderMetadataService.isFolderAlreadyAnalyzed(folderPath)) {
+            log.info("Folder {} is already analyzed. Skipping...", folderPath);
+            return;
+        }
+
+        // 현재 폴더를 처리 중으로 마크하고 파일 분석
+        folderMetadataService.saveAnalyzedFolder(folderPath);
+        log.info("Processing folder: {}", folderPath);
+
+        // 폴더 내 모든 파일 및 폴더 목록 가져오기
         Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
         log.info("Found {} files in folder: {}", files.size(), folderPath);
 
-        // ExecutorService 생성 (파일을 병렬로 처리하기 위해)
-        int availableCores = Runtime.getRuntime().availableProcessors();
-
-        ExecutorService executorService = Executors.newFixedThreadPool(availableCores);
-
+        // .xlsx 파일 처리
         List<CompletableFuture<Void>> futures = new ArrayList<>();
-        AtomicBoolean stopSubfolderSearch = new AtomicBoolean(false); // 하위 폴더 탐색을 제어
 
         for (ChannelSftp.LsEntry entry : files) {
             String fileName = entry.getFilename();
-            if (fileName.endsWith(".xlsx")) {
-                synchronized (processedImageIds) {
-                    if (processedImageIds.contains(fileName)) {
-                        continue;  // 이미 처리된 파일은 건너뜀
-                    }
-                    processedImageIds.add(fileName);  // 파일을 처리 목록에 추가
-                }
 
-                // 각 .xlsx 파일에 대한 처리 작업을 병렬로 실행할 CompletableFuture로 래핑
+            if (fileName.endsWith(".xlsx")) {
+                // 중복 체크: 이미 처리된 파일은 건너뜁니다.
+                if (processedImageIds.contains(fileName)) {
+                    log.info("File {} is already processed. Skipping...", fileName);
+                    continue;
+                }
+                processedImageIds.add(fileName); // 파일을 처리 목록에 추가
+
+                // 각 .xlsx 파일에 대한 처리 작업 실행
                 futures.add(CompletableFuture.runAsync(() -> {
                     try {
-                        processFile(channelSftp, folderPath, fileName, resultList, processedImageIds, stopSubfolderSearch);
+                        processFile(channelSftp, folderPath, fileName, resultList, processedImageIds, new AtomicBoolean(false));
                     } catch (Exception e) {
                         log.error("Error processing file: {}", fileName, e);
                     }
-                }, executorService));
-
-                // 엑셀 파일을 처리한 후에는 하위 폴더 탐색을 중지하고 바로 다음 폴더로 넘어감
-                stopSubfolderSearch.set(true);  // 하위 폴더 탐색 중지
-                break;  // 엑셀 파일을 처리했으므로, 추가적으로 하위 폴더를 탐색할 필요가 없습니다.
+                }));
             }
         }
 
         // 모든 파일 처리 완료까지 기다림
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
-        // 수정된 코드
-        if (!stopSubfolderSearch.get()) {
-            // 여기서만 하위 폴더 탐색을 진행합니다.
-            for (ChannelSftp.LsEntry entry : files) {
-                if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
-                    String subFolderPath = folderPath + "/" + entry.getFilename();
-                    if (subFolderPath.contains("/Labelling/Labelling")) {
-                        continue;
-                    }
-                    // 하위 폴더 탐색을 진행하려면 stopSubfolderSearch가 false여야만 실행
-                    if (!stopSubfolderSearch.get()) {
-                        processFolderRecursively(channelSftp, subFolderPath, resultList, processedImageIds);  // 하위 폴더 탐색
-                    }
+        // 하위 폴더 탐색
+        for (ChannelSftp.LsEntry entry : files) {
+            if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
+                String subFolderPath = folderPath + "/" + entry.getFilename();
+
+                // 하위 폴더가 처리되지 않은 경우만 처리
+                if (!folderMetadataService.isFolderAlreadyAnalyzed(subFolderPath)) {
+                    processFolderRecursively(channelSftp, subFolderPath, resultList, processedImageIds);
+                } else {
+                    log.info("Subfolder {} is already analyzed. Skipping...", subFolderPath);
                 }
             }
         }
-
-
-        // Executor 종료
-        executorService.shutdown();
     }
-
 
     private void processFile(ChannelSftp channelSftp, String folderPath, String fileName, List<Map<String, Object>> resultList, Set<String> processedImageIds, AtomicBoolean stopSubfolderSearch) throws Exception {
         InputStream inputStream = SFTPClient.readFile(channelSftp, folderPath, fileName);
@@ -342,7 +340,6 @@ public class AnalyzeBoardServiceImpl {
 
     private boolean checkFileExistsInSFTP(ChannelSftp channelSftp, String folderPath, String fileName, String subFolder) throws SftpException {
         String targetPath = folderPath + subFolder;
-
         Set<String> cachedFiles = folderFileCache.computeIfAbsent(targetPath, path -> {
             try {
                 Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, targetPath);
@@ -359,6 +356,7 @@ public class AnalyzeBoardServiceImpl {
 
         return cachedFiles.contains(fileName);
     }
+
 
 
 

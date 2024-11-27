@@ -36,12 +36,13 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	providedRuntime 'org.springframework.boot:spring-boot-starter-tomcat'
-
+	runtimeOnly 'com.h2database:h2'
 
 	implementation 'org.apache.poi:poi:5.0.0'
 	implementation 'org.apache.poi:poi-ooxml:5.0.0'
 	implementation 'org.apache.xmlbeans:xmlbeans:5.1.1'
 	implementation 'org.apache.commons:commons-collections4:4.4'
+	implementation 'org.springframework.boot:spring-boot-starter-jdbc'
 // WebDAV Client 라이브러리
 // https://mvnrepository.com/artifact/org.apache.jackrabbit/oak-jackrabbit-api
 	implementation group: 'org.apache.jackrabbit', name: 'oak-jackrabbit-api', version: '1.72.0'
