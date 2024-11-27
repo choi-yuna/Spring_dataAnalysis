@@ -4,7 +4,8 @@ import com.fas.dentistry_data_analysis.util.SFTPClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jcraft.jsch.ChannelSftp;
-import com.jcraft.jsch.JSchException;
+import com.fas.dentistry_data_analysis.repository.FileAnalysisStatusRepository;
+import com.fas.dentistry_data_analysis.repository.AnalysisResultsRepository;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.SftpException;
 import lombok.extern.slf4j.Slf4j;
@@ -30,16 +31,25 @@ public class AnalyzeBoardServiceImpl {
     private final DataGropedService dataGropedService;
     private final ExcelService excelService;
 
+    private final FileAnalysisStatusRepository fileStatusRepo;
+    private final AnalysisResultsRepository resultsRepo;
+
     private final ExecutorService executorService = Executors.newFixedThreadPool(2 * Runtime.getRuntime().availableProcessors());
 
-    public AnalyzeBoardServiceImpl(DataGropedService dataGropedService, ExcelService excelService) {
+    public AnalyzeBoardServiceImpl(DataGropedService dataGropedService, ExcelService excelService, FileAnalysisStatusRepository fileStatusRepo, AnalysisResultsRepository resultsRepo) {
         this.dataGropedService = dataGropedService;
         this.excelService = excelService;
+        this.fileStatusRepo = fileStatusRepo;
+        this.resultsRepo = resultsRepo;
     }
+
+
 
 
     public Map<String, Object> processFilesInFolder(String folderPath) throws Exception {
         List<Map<String, Object>> resultList = new ArrayList<>();
+        Set<String> processedFiles = new HashSet<>();
+        Map<String, Object> response = new HashMap<>();
 
         Session session = null;
         ChannelSftp channelSftp = null;
@@ -58,7 +68,6 @@ public class AnalyzeBoardServiceImpl {
             log.info("SFTP connection closed");
         }
 
-        Map<String, Object> response = new HashMap<>();
 
 // "질환 ALL" 데이터 먼저 추가
         List<Map<String, Object>> diseaseData = new ArrayList<>();
@@ -71,21 +80,6 @@ public class AnalyzeBoardServiceImpl {
         institutionData.add(dataGropedService.createAllData(resultList, "DISEASE_CLASS", "기관 ALL"));
         institutionData.addAll(dataGropedService.groupDataByInstitution(resultList));  // 그룹화된 데이터 추가
         response.put("기관별", institutionData);
-
-// 중복 체크를 위한 IMAGE_ID 처리
-        Set<String> uniqueImageIds = new HashSet<>();
-        int nullCount = 0;  // null값 확인용 카운트
-
-        for (Map<String, Object> row : resultList) {
-            String imageId = (String) row.get("IMAGE_ID");
-
-            // null값을 확인하고 카운트
-            if (imageId == null) {
-                nullCount++;
-            } else {
-                uniqueImageIds.add(imageId);
-            }
-        }
 
 
         return response;

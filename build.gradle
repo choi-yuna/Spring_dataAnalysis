@@ -53,6 +53,11 @@ dependencies {
 
 
 	implementation 'com.jcraft:jsch:0.1.55'
+	implementation 'mysql:mysql-connector-java:8.0.33' // MySQL 드라이버
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa' // JPA
+	implementation 'org.springframework.boot:spring-boot-starter-web' // Spring Web
+	implementation 'org.springframework.boot:spring-boot-starter-validation' // Validation
+	testImplementation 'org.springframework.boot:spring-boot-starter-test' // Test
 
 
 

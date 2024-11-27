@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -32,10 +33,17 @@ public class ExcelAnalyzeController {
     }
 
     @PostMapping("/dashboard")
-    public ResponseEntity<?> dashboardData() throws Exception {
-        Map<String, Object>   stringObjectMap = analyzeBoardService.processFilesInFolder(folderPath);
-        return ResponseEntity.ok(Map.of("data", stringObjectMap));
+    public ResponseEntity<?> getDashboardData() throws Exception {
+        Map<String, Object> responseData = analyzeBoardService.processFilesInFolder(folderPath);
+        return ResponseEntity.ok(responseData);
     }
+
+    @GetMapping("/results")
+    public ResponseEntity<?> getAnalysisResults() {
+        return ResponseEntity.ok(Map.of("results", "Your analysis results from DB here"));
+    }
+
+
     // 기존 분석 API
 //    @PostMapping("/analyze")
 //    public ResponseEntity<?> analyzeData(@RequestBody AnalysisRequestDTO request) {
