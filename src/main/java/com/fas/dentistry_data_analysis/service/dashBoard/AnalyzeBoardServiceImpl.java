@@ -10,8 +10,7 @@ import com.jcraft.jsch.SftpException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.*;
@@ -91,69 +90,91 @@ public class AnalyzeBoardServiceImpl {
         return response;
 
     }
-
     private void processFolderRecursively(ChannelSftp channelSftp, String folderPath, List<Map<String, Object>> resultList, Set<String> processedImageIds) throws Exception {
         // 폴더 내 모든 .xlsx 파일 목록을 가져옵니다.
         Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
         log.info("Found {} files in folder: {}", files.size(), folderPath);
 
-        // ExecutorService 생성 (파일을 병렬로 처리하기 위해)
-        int availableCores = Runtime.getRuntime().availableProcessors();
+        boolean isExcelFileProcessed = false;  // 이 폴더에서 엑셀 파일을 처리했는지 확인
 
-        ExecutorService executorService = Executors.newFixedThreadPool(availableCores);
+        // 폴더에 이미 분석한 결과를 저장한 txt 파일이 있다면 처리 건너뜁니다.
+        if (checkFileExistsInSFTP(channelSftp, folderPath, "analysis_result.txt", "")) {
+            log.info("Skipping already processed folder: {}", folderPath);
+            return; // 분석을 건너뜁니다.
+        }
 
+        // ExecutorService를 이미 클래스 수준에서 정의한 것을 재사용
         List<CompletableFuture<Void>> futures = new ArrayList<>();
-        AtomicBoolean stopSubfolderSearch = new AtomicBoolean(false); // 하위 폴더 탐색을 제어
+        AtomicBoolean stopSubfolderSearch = new AtomicBoolean(false);  // 하위 폴더 탐색을 제어
 
+        // 엑셀 파일들을 처리합니다.
         for (ChannelSftp.LsEntry entry : files) {
             String fileName = entry.getFilename();
             if (fileName.endsWith(".xlsx")) {
-                synchronized (processedImageIds) {
-                    if (processedImageIds.contains(fileName)) {
-                        continue;  // 이미 처리된 파일은 건너뜀
-                    }
-                    processedImageIds.add(fileName);  // 파일을 처리 목록에 추가
+                // 중복 체크: 이미 처리된 파일은 건너뜁니다.
+                if (processedImageIds.contains(fileName)) {
+                    continue;  // 이미 처리된 파일은 건너뜁니다.
                 }
+                processedImageIds.add(fileName);  // 파일을 처리 목록에 추가
 
-                // 각 .xlsx 파일에 대한 처리 작업을 병렬로 실행할 CompletableFuture로 래핑
+                // 각 .xlsx 파일에 대한 처리 작업을 병렬로 실행
                 futures.add(CompletableFuture.runAsync(() -> {
                     try {
                         processFile(channelSftp, folderPath, fileName, resultList, processedImageIds, stopSubfolderSearch);
                     } catch (Exception e) {
                         log.error("Error processing file: {}", fileName, e);
                     }
-                }, executorService));
+                }));
 
-                // 엑셀 파일을 처리한 후에는 하위 폴더 탐색을 중지하고 바로 다음 폴더로 넘어감
-                stopSubfolderSearch.set(true);  // 하위 폴더 탐색 중지
-                break;  // 엑셀 파일을 처리했으므로, 추가적으로 하위 폴더를 탐색할 필요가 없습니다.
+                isExcelFileProcessed = true;  // 엑셀 파일이 처리되었음을 기록
             }
         }
 
         // 모든 파일 처리 완료까지 기다림
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
-        // 수정된 코드
-        if (!stopSubfolderSearch.get()) {
-            // 여기서만 하위 폴더 탐색을 진행합니다.
-            for (ChannelSftp.LsEntry entry : files) {
-                if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
-                    String subFolderPath = folderPath + "/" + entry.getFilename();
-                    if (subFolderPath.contains("/Labelling/Labelling")) {
-                        continue;
-                    }
-                    // 하위 폴더 탐색을 진행하려면 stopSubfolderSearch가 false여야만 실행
-                    if (!stopSubfolderSearch.get()) {
-                        processFolderRecursively(channelSftp, subFolderPath, resultList, processedImageIds);  // 하위 폴더 탐색
-                    }
-                }
-            }
+        // 이 폴더에서 엑셀 파일을 처리한 경우에만 결과 저장
+        if (isExcelFileProcessed) {
+            saveResultsToSftp(folderPath, resultList, channelSftp);
+            log.info("Processed and saved results for folder: {}", folderPath);
         }
 
-
-        // Executor 종료
-        executorService.shutdown();
+        // 하위 폴더 탐색을 진행
+        for (ChannelSftp.LsEntry entry : files) {
+            if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
+                String subFolderPath = folderPath + "/" + entry.getFilename();
+                processFolderRecursively(channelSftp, subFolderPath, resultList, processedImageIds);  // 하위 폴더 탐색
+            }
+        }
     }
+
+    private void saveResultsToSftp(String folderPath, List<Map<String, Object>> resultList, ChannelSftp channelSftp) throws IOException, SftpException {
+        // 결과를 텍스트 형식으로 변환
+        StringBuilder fileContent = new StringBuilder();
+        fileContent.append("질환\t기관\t라벨링건수\t데이터구성검수\t1차검수\t2차검수\n");
+
+        for (Map<String, Object> result : resultList) {
+            String diseaseClass = (String) result.getOrDefault("DISEASE_CLASS", "N/A");
+            String institutionId = (String) result.getOrDefault("INSTITUTION_ID", "N/A");
+            int labelingCount = (int) result.getOrDefault("라벨링건수", 0);
+            int dataValidationCount = (int) result.getOrDefault("데이터구성검수", 0);
+            int firstCheckCount = (int) result.getOrDefault("1차검수", 0);
+            int secondCheckCount = (int) result.getOrDefault("2차검수", 0);
+
+            // 결과 데이터를 한 줄씩 추가
+            fileContent.append(String.format("%s\t%s\t%d\t%d\t%d\t%d\n", diseaseClass, institutionId, labelingCount, dataValidationCount, firstCheckCount, secondCheckCount));
+        }
+
+        // 문자열 데이터를 InputStream으로 변환
+        InputStream inputStream = new ByteArrayInputStream(fileContent.toString().getBytes());
+
+        // SFTP 서버에 저장 (폴더 경로 + 파일 이름 지정)
+        String sftpFilePath = folderPath + "/analysis_result.txt";
+        SFTPClient.uploadFile(channelSftp, folderPath, "analysis_result.txt", inputStream);
+
+        log.info("Results successfully saved to SFTP at: {}", sftpFilePath);
+    }
+
 
 
     private void processFile(ChannelSftp channelSftp, String folderPath, String fileName, List<Map<String, Object>> resultList, Set<String> processedImageIds, AtomicBoolean stopSubfolderSearch) throws Exception {
