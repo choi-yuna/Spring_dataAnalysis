@@ -1,6 +1,7 @@
 package com.fas.dentistry_data_analysis.service.dashBoard;
 
 import com.fas.dentistry_data_analysis.util.SFTPClient;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jcraft.jsch.ChannelSftp;
@@ -91,86 +92,100 @@ public class AnalyzeBoardServiceImpl {
 
     }
 
+    private void processFolderRecursively(ChannelSftp channelSftp, String folderPath, List<Map<String, Object>> resultList, Set<String> processedImageIds) throws Exception {
+        // 폴더 내 모든 .xlsx 파일 목록을 가져옵니다.
+        Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
+        log.info("Found {} files in folder: {}", files.size(), folderPath);
 
+        // 폴더에 이미 분석한 결과를 저장한 JSON 파일이 있다면 데이터를 로드하고 처리 건너뜁니다.
+        if (checkFileExistsInSFTP(channelSftp, folderPath, "analysis_result.json", "")) {
+            log.info("JSON result file already exists for folder: {}", folderPath);
 
-        private void processFolderRecursively(ChannelSftp channelSftp, String folderPath, List<Map<String, Object>> resultList, Set<String> processedImageIds) throws Exception {
-            // 폴더 내 모든 .xlsx 파일 목록을 가져옵니다.
-            Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
-            log.info("Found {} files in folder: {}", files.size(), folderPath);
+            // JSON 파일 로드하여 resultList에 추가
+            List<Map<String, Object>> existingResults = loadResultsFromJsonSftp(folderPath, channelSftp);
+            resultList.addAll(existingResults);
 
-//            // 폴더에 이미 분석한 결과를 저장한 JSON 파일이 있다면 처리 건너뜁니다.
-//            if (checkFileExistsInSFTP(channelSftp, folderPath, "analysis_result.json", "")) {
-//                log.info("Skipping folder as JSON result file already exists: {}", folderPath);
-//                return; // 분석을 건너뜁니다.
-//            }
-
-            // 폴더별 독립적인 folderResultList 생성
-            List<Map<String, Object>> folderResultList = new ArrayList<>();
-            boolean isExcelFileProcessed = false; // 엑셀 파일 처리 여부 확인
-
-            // ExecutorService 생성 (파일을 병렬로 처리하기 위해)
-            int availableCores = Runtime.getRuntime().availableProcessors();
-            ExecutorService executorService = Executors.newFixedThreadPool(availableCores);
-
-            List<CompletableFuture<Void>> futures = new ArrayList<>();
-            AtomicBoolean stopSubfolderSearch = new AtomicBoolean(false); // 하위 폴더 탐색을 제어
-
-            for (ChannelSftp.LsEntry entry : files) {
-                String fileName = entry.getFilename();
-                if (fileName.endsWith(".xlsx")) {
-                    synchronized (processedImageIds) {
-                        if (processedImageIds.contains(fileName)) {
-                            continue; // 이미 처리된 파일은 건너뜁니다.
-                        }
-                        processedImageIds.add(fileName); // 파일을 처리 목록에 추가
-                    }
-
-                    // 각 .xlsx 파일에 대한 처리 작업을 병렬로 실행할 CompletableFuture로 래핑
-                    futures.add(CompletableFuture.runAsync(() -> {
-                        try {
-                            processFile(channelSftp, folderPath, fileName, folderResultList, processedImageIds, stopSubfolderSearch);
-                        } catch (Exception e) {
-                            log.error("Error processing file: {}", fileName, e);
-                        }
-                    }, executorService));
-
-                    isExcelFileProcessed = true; // 엑셀 파일 처리 여부를 true로 설정
-                    stopSubfolderSearch.set(true); // 하위 폴더 탐색 중지
-                    break; // 엑셀 파일을 처리했으므로 추가적으로 하위 폴더를 탐색할 필요가 없음
-                }
-            }
-
-            // 모든 파일 처리 완료까지 기다림
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-
-            // 폴더별 결과를 누적 resultList에 추가
-            resultList.addAll(folderResultList);
-
-            // 엑셀 파일이 처리된 경우 폴더별 JSON 파일로 결과 저장
-            if (isExcelFileProcessed) {
-                saveResultsToJsonSftp(folderPath, folderResultList, channelSftp);
-                log.info("Processed and saved results to JSON for folder: {}", folderPath);
-            }
-
-            // 하위 폴더 탐색 진행 (stopSubfolderSearch가 false인 경우에만)
-            if (!stopSubfolderSearch.get()) {
-                for (ChannelSftp.LsEntry entry : files) {
-                    if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
-                        String subFolderPath = folderPath + "/" + entry.getFilename();
-                        if (subFolderPath.contains("/Labelling/Labelling")) {
-                            continue;
-                        }
-                        processFolderRecursively(channelSftp, subFolderPath, resultList, processedImageIds); // 하위 폴더 탐색
-                    }
-                }
-            }
-
-            // Executor 종료
-            executorService.shutdown();
+            return; // 추가 처리 건너뜁니다.
         }
 
+        // 폴더별 독립적인 folderResultList 생성
+        List<Map<String, Object>> folderResultList = new ArrayList<>();
+        boolean isExcelFileProcessed = false; // 엑셀 파일 처리 여부 확인
 
-        private void saveResultsToJsonSftp(String folderPath, List<Map<String, Object>> resultList, ChannelSftp channelSftp) throws IOException, SftpException {
+        // ExecutorService 생성 (파일을 병렬로 처리하기 위해)
+        int availableCores = Runtime.getRuntime().availableProcessors();
+        ExecutorService executorService = Executors.newFixedThreadPool(availableCores);
+
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        AtomicBoolean stopSubfolderSearch = new AtomicBoolean(false); // 하위 폴더 탐색을 제어
+
+        for (ChannelSftp.LsEntry entry : files) {
+            String fileName = entry.getFilename();
+            if (fileName.endsWith(".xlsx")) {
+                synchronized (processedImageIds) {
+                    if (processedImageIds.contains(fileName)) {
+                        continue; // 이미 처리된 파일은 건너뜁니다.
+                    }
+                    processedImageIds.add(fileName); // 파일을 처리 목록에 추가
+                }
+
+                // 각 .xlsx 파일에 대한 처리 작업을 병렬로 실행할 CompletableFuture로 래핑
+                futures.add(CompletableFuture.runAsync(() -> {
+                    try {
+                        processFile(channelSftp, folderPath, fileName, folderResultList, processedImageIds, stopSubfolderSearch);
+                    } catch (Exception e) {
+                        log.error("Error processing file: {}", fileName, e);
+                    }
+                }, executorService));
+
+                isExcelFileProcessed = true; // 엑셀 파일 처리 여부를 true로 설정
+                stopSubfolderSearch.set(true); // 하위 폴더 탐색 중지
+                break; // 엑셀 파일을 처리했으므로 추가적으로 하위 폴더를 탐색할 필요가 없음
+            }
+        }
+
+        // 모든 파일 처리 완료까지 기다림
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+        // 폴더별 결과를 누적 resultList에 추가
+        resultList.addAll(folderResultList);
+
+        // 엑셀 파일이 처리된 경우 폴더별 JSON 파일로 결과 저장
+        if (isExcelFileProcessed) {
+            saveResultsToJsonSftp(folderPath, folderResultList, channelSftp);
+            log.info("Processed and saved results to JSON for folder: {}", folderPath);
+        }
+
+        // 하위 폴더 탐색 진행 (stopSubfolderSearch가 false인 경우에만)
+        if (!stopSubfolderSearch.get()) {
+            for (ChannelSftp.LsEntry entry : files) {
+                if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
+                    String subFolderPath = folderPath + "/" + entry.getFilename();
+                    if (subFolderPath.contains("/Labelling/Labelling")) {
+                        continue;
+                    }
+                    processFolderRecursively(channelSftp, subFolderPath, resultList, processedImageIds); // 하위 폴더 탐색
+                }
+            }
+        }
+
+        // Executor 종료
+        executorService.shutdown();
+    }
+
+    private List<Map<String, Object>> loadResultsFromJsonSftp(String folderPath, ChannelSftp channelSftp) throws IOException, SftpException {
+        // JSON 파일 경로
+        String jsonFilePath = folderPath + "/analysis_result.json";
+
+        // JSON 파일 로드
+        try (InputStream inputStream = SFTPClient.readFile(channelSftp, folderPath, "analysis_result.json")) {
+            ObjectMapper objectMapper = new ObjectMapper();
+            return objectMapper.readValue(inputStream, new TypeReference<List<Map<String, Object>>>() {});
+        }
+    }
+
+
+    private void saveResultsToJsonSftp(String folderPath, List<Map<String, Object>> resultList, ChannelSftp channelSftp) throws IOException, SftpException {
         // 결과를 JSON 형식으로 변환
         List<Map<String, Object>> jsonResultList = new ArrayList<>();
 
