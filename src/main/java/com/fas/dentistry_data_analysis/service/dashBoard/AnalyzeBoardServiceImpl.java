@@ -90,6 +90,7 @@ public class AnalyzeBoardServiceImpl {
         return response;
 
     }
+
     private void processFolderRecursively(ChannelSftp channelSftp, String folderPath, List<Map<String, Object>> resultList, Set<String> processedImageIds) throws Exception {
         // 폴더 내 모든 .xlsx 파일 목록을 가져옵니다.
         Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
@@ -97,8 +98,8 @@ public class AnalyzeBoardServiceImpl {
 
         boolean isExcelFileProcessed = false;  // 이 폴더에서 엑셀 파일을 처리했는지 확인
 
-        // 폴더에 이미 분석한 결과를 저장한 txt 파일이 있다면 처리 건너뜁니다.
-        if (checkFileExistsInSFTP(channelSftp, folderPath, "analysis_result.txt", "")) {
+        // 폴더에 이미 분석한 결과를 저장한 json 파일이 있다면 처리 건너뜁니다.
+        if (checkFileExistsInSFTP(channelSftp, folderPath, "analysis_result.json", "")) {
             log.info("Skipping already processed folder: {}", folderPath);
             return; // 분석을 건너뜁니다.
         }
@@ -135,7 +136,7 @@ public class AnalyzeBoardServiceImpl {
 
         // 이 폴더에서 엑셀 파일을 처리한 경우에만 결과 저장
         if (isExcelFileProcessed) {
-            saveResultsToSftp(folderPath, resultList, channelSftp);
+            saveResultsToJsonSftp(folderPath, resultList, channelSftp);
             log.info("Processed and saved results for folder: {}", folderPath);
         }
 
@@ -148,33 +149,43 @@ public class AnalyzeBoardServiceImpl {
         }
     }
 
-    private void saveResultsToSftp(String folderPath, List<Map<String, Object>> resultList, ChannelSftp channelSftp) throws IOException, SftpException {
-        // 결과를 텍스트 형식으로 변환
-        StringBuilder fileContent = new StringBuilder();
-        fileContent.append("질환\t기관\t라벨링건수\t데이터구성검수\t1차검수\t2차검수\n");
+    private void saveResultsToJsonSftp(String folderPath, List<Map<String, Object>> resultList, ChannelSftp channelSftp) throws IOException, SftpException {
+        // 결과를 JSON 형식으로 변환
+        List<Map<String, Object>> jsonResultList = new ArrayList<>();
 
         for (Map<String, Object> result : resultList) {
-            String diseaseClass = (String) result.getOrDefault("DISEASE_CLASS", "N/A");
-            String institutionId = (String) result.getOrDefault("INSTITUTION_ID", "N/A");
-            int labelingCount = (int) result.getOrDefault("라벨링건수", 0);
-            int dataValidationCount = (int) result.getOrDefault("데이터구성검수", 0);
-            int firstCheckCount = (int) result.getOrDefault("1차검수", 0);
-            int secondCheckCount = (int) result.getOrDefault("2차검수", 0);
+            Map<String, Object> resultData = new HashMap<>();
+            resultData.put("DISEASE_CLASS", result.getOrDefault("DISEASE_CLASS", "N/A"));
+            resultData.put("INSTITUTION_ID", result.getOrDefault("INSTITUTION_ID", "N/A"));
+            resultData.put("IMAGE_ID", result.getOrDefault("IMAGE_ID", "N/A"));
+            resultData.put("라벨링건수", result.getOrDefault("라벨링건수", 0));
+            resultData.put("데이터구성검수", result.getOrDefault("데이터구성검수", 0));
+            resultData.put("1차검수", result.getOrDefault("1차검수", 0));
+            resultData.put("2차검수", result.getOrDefault("2차검수", 0));
 
-            // 결과 데이터를 한 줄씩 추가
-            fileContent.append(String.format("%s\t%s\t%d\t%d\t%d\t%d\n", diseaseClass, institutionId, labelingCount, dataValidationCount, firstCheckCount, secondCheckCount));
+            jsonResultList.add(resultData);
         }
 
+        // ObjectMapper를 사용하여 JSON 형식으로 변환
+        ObjectMapper objectMapper = new ObjectMapper();
+        String jsonContent = objectMapper.writeValueAsString(jsonResultList);
+
         // 문자열 데이터를 InputStream으로 변환
-        InputStream inputStream = new ByteArrayInputStream(fileContent.toString().getBytes());
+        InputStream inputStream = new ByteArrayInputStream(jsonContent.getBytes());
 
         // SFTP 서버에 저장 (폴더 경로 + 파일 이름 지정)
-        String sftpFilePath = folderPath + "/analysis_result.txt";
-        SFTPClient.uploadFile(channelSftp, folderPath, "analysis_result.txt", inputStream);
+        String sftpFilePath = folderPath + "/analysis_result.json";
+
+        // SFTP에 이미 파일이 존재하는지 다시 한번 체크
+        if (checkFileExistsInSFTP(channelSftp, folderPath, "analysis_result.json", "")) {
+            log.info("JSON result file already exists. Skipping upload: {}", sftpFilePath);
+            return;
+        }
+
+        SFTPClient.uploadFile(channelSftp, folderPath, "analysis_result.json", inputStream);
 
         log.info("Results successfully saved to SFTP at: {}", sftpFilePath);
     }
-
 
 
     private void processFile(ChannelSftp channelSftp, String folderPath, String fileName, List<Map<String, Object>> resultList, Set<String> processedImageIds, AtomicBoolean stopSubfolderSearch) throws Exception {
