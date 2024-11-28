@@ -465,6 +465,17 @@ public class DataGropedService {
             subData.add(subRow);
         }
 
+        // subData 정렬
+        subData.sort((a, b) -> {
+            String diseaseA = a.get(0);  // 질환명
+            String diseaseB = b.get(0);  // 질환명
+
+            int indexA = diseaseOrder.indexOf(diseaseA);  // diseaseOrder에서 해당 질환의 인덱스
+            int indexB = diseaseOrder.indexOf(diseaseB);
+
+            return Integer.compare(indexA, indexB);  // indexA와 indexB 비교하여 정렬
+        });
+
         // totalData에서 목표건수와 구축율 계산
         totalData.set(0, totalGoalCount);
         int totalFirstCheck = totalData.get(2);
