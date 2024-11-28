@@ -285,7 +285,6 @@ public class DataGropedService {
             String groupKey = (String) item.get(groupingKey); // 기관명
             String diseaseClass = (String) item.get("DISEASE_CLASS"); // 질환 구분
 
-            log.info("Processing groupKey: {}, diseaseClass: {}", groupKey, diseaseClass);
 
             // 기관별로 그룹화된 데이터 초기화
             if (!groupedDataMap.containsKey(groupKey)) {
@@ -342,6 +341,15 @@ public class DataGropedService {
             // 질환별로 목표건수 누적 (해당 질환을 가진 기관에 대해서만 한 번만 목표건수 추가)
             if (!processedDiseaseInstitutions.get(diseaseClass).contains(groupKey)) {
                 processedDiseaseInstitutions.get(diseaseClass).add(groupKey); // 처리된 기관 목록에 추가
+
+                // 기존 목표건수 가져오기
+                int currentGoalCount = (int) groupedDataMap.get(groupKey).get("목표건수");
+
+                // 새 목표건수를 누적
+                groupedDataMap.get(groupKey).put("목표건수", currentGoalCount + diseaseGoalCount);
+
+                // 업데이트된 목표건수 로그
+                log.info("Updated goal count for institution: {}, Disease: {}, New Goal Count: {}", groupKey, diseaseClass, currentGoalCount + diseaseGoalCount);
             }
 
             // 기관별 항목을 totalData에 누적
@@ -382,6 +390,15 @@ public class DataGropedService {
 
             // 기관별 목표건수 합산
             int totalGroupGoalCount = (int) groupData.get("목표건수"); // 기관별 목표건수
+
+            log.info("Institution: '{}', Total Group Goal Count: {}", groupData.get(groupingKey), totalGroupGoalCount);
+
+            if (totalGroupGoalCount <= 0) {
+                log.warn("Institution '{}' has an invalid goal count. Check initialization or disease processing logic.", groupData.get(groupingKey));
+            }
+
+
+
             subRow.add(String.valueOf(totalGroupGoalCount)); // 기관별 목표건수 합
 
             // 각 항목에 대한 값 추가
@@ -398,6 +415,7 @@ public class DataGropedService {
             subRow.add(buildRateForGroup + "");
 
             totalGoalCount += totalGroupGoalCount;
+            log.info("!!!!!!!!!!!!Updated Total Goal Count: {}", totalGroupGoalCount);
             subData.add(subRow);
         }
 
