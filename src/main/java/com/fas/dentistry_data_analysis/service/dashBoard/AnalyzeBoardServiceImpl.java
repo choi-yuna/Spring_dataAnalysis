@@ -65,13 +65,13 @@ public class AnalyzeBoardServiceImpl {
 
         // "질환 ALL" 데이터 먼저 추가
         List<Map<String, Object>> diseaseData = new ArrayList<>();
-        diseaseData.add(dataGropedService.createAllData(resultList, "INSTITUTION_ID", "질환 ALL"));
+        diseaseData.add(dataGropedService.createDiseaseData(resultList, "INSTITUTION_ID", "질환 ALL"));
         diseaseData.addAll(dataGropedService.groupDataByDisease(resultList));  // 그룹화된 데이터 추가
         response.put("질환별", diseaseData);
 
         // "기관 ALL" 데이터 먼저 추가
         List<Map<String, Object>> institutionData = new ArrayList<>();
-        institutionData.add(dataGropedService.createAllData(resultList, "DISEASE_CLASS", "기관 ALL"));
+        institutionData.add(dataGropedService.createInstitutionData(resultList, "DISEASE_CLASS", "기관 ALL"));
         institutionData.addAll(dataGropedService.groupDataByInstitution(resultList));  // 그룹화된 데이터 추가
         response.put("기관별", institutionData);
 
@@ -108,7 +108,21 @@ public class AnalyzeBoardServiceImpl {
 
             // JSON 파일 로드하여 resultList에 추가
             List<Map<String, Object>> existingResults = loadResultsFromJsonSftp(folderPath, channelSftp);
-            resultList.addAll(existingResults);
+
+            // 기존 결과에서 중복된 IMAGE_ID를 제거
+            List<Map<String, Object>> filteredResults = new ArrayList<>();
+            for (Map<String, Object> result : existingResults) {
+                String imageId = (String) result.get("IMAGE_ID");
+
+                // 이미지 ID가 null이거나 이미 처리된 ID는 건너뜁니다.
+                if (imageId != null && !processedImageIds.contains(imageId)) {
+                    filteredResults.add(result);
+                    processedImageIds.add(imageId);  // 처리한 IMAGE_ID를 Set에 추가
+                }
+            }
+
+            // 필터링된 결과만 resultList에 추가
+            resultList.addAll(filteredResults);
 
             return; // 추가 처리 건너뜁니다.
         }
