@@ -196,7 +196,6 @@ public class AnalyzeBoardServiceImpl {
             resultData.put("라벨링pass건수", result.getOrDefault("라벨링등록건수", 0));
             resultData.put("1차검수", result.getOrDefault("1차검수", 0));
             resultData.put("2차검수", result.getOrDefault("2차검수", 0));
-
             jsonResultList.add(resultData);
         }
 
@@ -260,6 +259,8 @@ public class AnalyzeBoardServiceImpl {
             boolean tlaExists = false;
             boolean cejExists = false;
             boolean alveExists = false;
+            boolean labellingExists = false;
+
 
             if (folderPath.contains("치주질환")) {
                 dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm", "");
@@ -299,15 +300,16 @@ public class AnalyzeBoardServiceImpl {
                 dcmExists = checkFileExistsInSFTPForImageId(channelSftp, folderPath, imageId);
                 jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
                 iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
-
-                if (!(dcmExists && jsonExists && iniExists)) {
-                    incrementStatus(resultList, institutionId, diseaseClass, imageId, "데이터구성검수");
-                    stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
-                } else {
-                    if (jsonExists) {
+                labellingExists = checkLabellingFileExistsInSFTPForImageId(channelSftp, folderPath+"/Labelling/Labelling", imageId);
+                if (jsonExists) {
+                    incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링등록건수");
+                    if ((dcmExists && labellingExists && iniExists)) {
+                        incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수");
                         processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
+                        stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
+                    } else {
+                        stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
                     }
-                    stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
                 }
             }
 
@@ -316,10 +318,6 @@ public class AnalyzeBoardServiceImpl {
         }
 
     }
-
-
-
-
 
     private boolean checkFileExistsInSFTPForImageId(ChannelSftp channelSftp, String folderPath, String imageId) throws SftpException {
         // 지정된 경로(folderPath) 내에서만 파일과 폴더를 검색합니다.
@@ -347,6 +345,22 @@ public class AnalyzeBoardServiceImpl {
         // 주어진 경로 내에서 imageId를 포함하는 폴더가 없으면 false 반환
         return false;
     }
+
+    private boolean checkLabellingFileExistsInSFTPForImageId(ChannelSftp channelSftp, String folderPath, String imageId) throws SftpException {
+        // 지정된 경로(folderPath) 내에서만 파일과 폴더를 검색합니다.
+        Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
+        // 주어진 경로에서 imageId와 일치하는 폴더를 찾습니다
+        for (ChannelSftp.LsEntry entry : files) {
+            // 폴더 이름에 imageId가 포함된 경우 true 반환
+            if (entry.getAttrs().isDir() && entry.getFilename().contains(imageId)) {
+                return true;
+            }
+        }
+
+        // imageId를 포함하는 폴더를 찾지 못하면 false 반환
+        return false;
+    }
+
 
     /**
      *JSON에서 검수 값 읽어오기
