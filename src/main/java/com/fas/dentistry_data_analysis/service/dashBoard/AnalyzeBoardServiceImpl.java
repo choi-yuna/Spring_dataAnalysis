@@ -5,14 +5,12 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jcraft.jsch.ChannelSftp;
-import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.SftpException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
-import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -194,8 +192,8 @@ public class AnalyzeBoardServiceImpl {
             resultData.put("DISEASE_CLASS", result.getOrDefault("DISEASE_CLASS", "N/A"));
             resultData.put("INSTITUTION_ID", result.getOrDefault("INSTITUTION_ID", "N/A"));
             resultData.put("IMAGE_ID", result.getOrDefault("IMAGE_ID", "N/A"));
-            resultData.put("라벨링건수", result.getOrDefault("라벨링건수", 0));
-            resultData.put("데이터구성검수", result.getOrDefault("데이터구성검수", 0));
+            resultData.put("라벨링등록건수", result.getOrDefault("라벨링등록건수", 0));
+            resultData.put("라벨링pass건수", result.getOrDefault("라벨링등록건수", 0));
             resultData.put("1차검수", result.getOrDefault("1차검수", 0));
             resultData.put("2차검수", result.getOrDefault("2차검수", 0));
 
@@ -224,6 +222,9 @@ public class AnalyzeBoardServiceImpl {
     }
 
 
+
+
+    //질환별 폴더 확인 로직
     private void processFile(ChannelSftp channelSftp, String folderPath, String fileName, List<Map<String, Object>> resultList, Set<String> processedImageIds, AtomicBoolean stopSubfolderSearch) throws Exception {
         InputStream inputStream = SFTPClient.readFile(channelSftp, folderPath, fileName);
 
@@ -242,6 +243,8 @@ public class AnalyzeBoardServiceImpl {
             // 아직 처리되지 않은 imageId는 처리 리스트에 추가
             processedImageIds.add(imageId);
 
+
+
             // 상태 업데이트
             String diseaseClass = (String) row.get("DISEASE_CLASS");
             String institutionId = (String) row.get("INSTITUTION_ID");
@@ -253,27 +256,63 @@ public class AnalyzeBoardServiceImpl {
             boolean dcmExists = false;
             boolean jsonExists = false;
             boolean iniExists = false;
+            boolean toothExists = false;
+            boolean tlaExists = false;
+            boolean cejExists = false;
+            boolean alveExists = false;
 
             if (folderPath.contains("치주질환")) {
                 dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm", "");
                 jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling/meta");
                 iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
-            } else {
+                toothExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/tooth");
+                tlaExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/tla");
+                cejExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/cej");
+                alveExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/alve");
+                if(jsonExists) {
+                    incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링등록건수");
+                    if ((dcmExists && iniExists && toothExists && tlaExists && cejExists && alveExists)) {
+                        incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수");
+                            processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
+                            stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
+                    } else {
+
+                        stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
+                    }
+                }
+            }
+            else if (folderPath.contains("두개안면")) {
+                jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
+                if(jsonExists) {
+                    incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링등록건수");
+                    if ((dcmExists && iniExists && toothExists && tlaExists && cejExists && alveExists)) {
+                        incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수");
+                        processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
+                        stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
+                    } else {
+
+                        stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
+                    }
+                }
+            }
+            else {
                 dcmExists = checkFileExistsInSFTPForImageId(channelSftp, folderPath, imageId);
                 jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
                 iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
+
+                if (!(dcmExists && jsonExists && iniExists)) {
+                    incrementStatus(resultList, institutionId, diseaseClass, imageId, "데이터구성검수");
+                    stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
+                } else {
+                    if (jsonExists) {
+                        processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
+                    }
+                    stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
+                }
             }
 
             // 파일 존재 여부에 따라 상태 업데이트
-            if (!(dcmExists && jsonExists && iniExists)) {
-                incrementStatus(resultList, institutionId, diseaseClass, imageId, "데이터구성검수");
-                stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
-            } else {
-                if (jsonExists) {
-                    processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
-                }
-                stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
-            }
+
         }
 
     }
@@ -308,6 +347,10 @@ public class AnalyzeBoardServiceImpl {
         // 주어진 경로 내에서 imageId를 포함하는 폴더가 없으면 false 반환
         return false;
     }
+
+    /**
+     *JSON에서 검수 값 읽어오기
+     */
     private void processJsonFile(ChannelSftp channelSftp, String folderPath, String imageId, List<Map<String, Object>> resultList, String institutionId, String diseaseClass) throws Exception {
 
         // JSON 파일 경로 설정
@@ -331,9 +374,10 @@ public class AnalyzeBoardServiceImpl {
 
 
             // 상태가 2인 경우에만 처리
-            if (labelingStatus) {
-                incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링건수");
-            }
+            //라벨링 건수 로직
+//            if (labelingStatus) {
+//                incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링건수");
+//            }
             if (firstCheckStatus) {
                 incrementStatus(resultList, institutionId, diseaseClass, imageId, "1차검수");
             }
@@ -359,45 +403,18 @@ public class AnalyzeBoardServiceImpl {
             newEntry.put("INSTITUTION_ID", institutionId);
             newEntry.put("DISEASE_CLASS", diseaseClass);  // diseaseClass 값도 추가
             newEntry.put("목표건수", 0);  // 목표건수는 나중에 계산
-            newEntry.put("라벨링건수", 0);
+            newEntry.put("라벨링등록건수", 0);
+            newEntry.put("라벨링pass건수", 0);
             newEntry.put("1차검수", 0);
             newEntry.put("데이터구성검수", 0);
             newEntry.put("2차검수", 0);
-            newEntry.put("목표건수_증가", false);  // 목표건수 증가 여부를 초기값 false로 설정
             resultList.add(newEntry);
             existing = Optional.of(newEntry);
         }
 
         Map<String, Object> statusMap = existing.get();
 
-        // 목표건수 증가 여부 체크 (Boolean 값을 null이 아닌 기본값인 false로 처리)
-        boolean incrementGoalCount = false;
-
-        if ("데이터구성검수".equals(status) && !(Boolean) statusMap.getOrDefault("목표건수_증가", false)){
-            incrementGoalCount = true;
-        }
-        // 상태 값이 "라벨링건수", "1차검수", "2차검수"일 때 한 번만 목표건수를 증가시키도록 처리
-        if ("라벨링건수".equals(status) && !(Boolean) statusMap.getOrDefault("목표건수_증가", false)) {
-            incrementGoalCount = true;
-        }
-        if ("1차검수".equals(status) && !(Boolean) statusMap.getOrDefault("목표건수_증가", false)) {
-            incrementGoalCount = true;
-        }
-        if ("2차검수".equals(status) && !(Boolean) statusMap.getOrDefault("목표건수_증가", false)) {
-            incrementGoalCount = true;
-        }
-
-        // 목표건수 증가 여부가 true일 경우에만 목표건수를 증가시킴
-        if (incrementGoalCount) {
-            Integer currentGoalCount = (Integer) statusMap.get("목표건수");
-            if (currentGoalCount == null) {
-                currentGoalCount = 0;
-            }
-            statusMap.put("목표건수", currentGoalCount + 1);  // 목표건수 증가
-            statusMap.put("목표건수_증가", true);  // 목표건수 증가 여부 표시
-        }
-
-        // 각 상태별 카운트 (라벨링건수, 1차검수, 2차검수) 증가
+        // 각 상태별 카운트 (벨링건수, 1차검수, 2차검수) 증가
         Integer currentStatusValue = (Integer) statusMap.get(status);
         if (currentStatusValue == null) {
             currentStatusValue = 0;
@@ -430,17 +447,11 @@ public class AnalyzeBoardServiceImpl {
 
 
 
-    // 여러 파일의 존재 여부를 한 번에 확인 (하위 폴더 포함)
-    private Map<String, Boolean> checkMultipleFilesExist(ChannelSftp channelSftp, String folderPath, List<String> fileNames, String subFolder) throws SftpException {
-        // 캐시에서 존재 여부를 먼저 확인
-        Map<String, Boolean> resultMap = new HashMap<>();
-        for (String fileName : fileNames) {
-            resultMap.put(fileName, checkFileExistsInSFTP(channelSftp, folderPath, fileName, subFolder));
-        }
-        return resultMap;
-    }
 
 
+
+
+    // JOSN 상태확인 키 확인
     private int getJsonStatus(JsonNode rootNode, String key) {
         // 각 key에 대한 변형된 키들을 처리
         String[] possibleKeys = getPossibleKeysForKey(key);

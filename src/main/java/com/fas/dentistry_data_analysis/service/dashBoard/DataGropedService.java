@@ -300,9 +300,9 @@ public class DataGropedService {
                 int secondCheckRate = (institutionGoalCount > 0) ? (int) ((secondCheck / (double) institutionGoalCount) * 100) : 0;
 
                 // 각 검수 항목별 구축율을 subRow에 추가
-                subRow.set(4, String.valueOf(firstCheckRate));  // 1차검수 구축율 (subRow[3]에 설정)
-                subRow.set(6, String.valueOf(dataCheckRate));  // 데이터구성검수 구축율 (subRow[5]에 설정)
-                subRow.set(8, String.valueOf(secondCheckRate)); // 2차검수 구축율 (subRow[7]에 설정)
+                subRow.set(4, String.valueOf(firstCheckRate) + "%");  // 1차검수 구축율 (subRow[3]에 설정)
+                subRow.set(6, String.valueOf(dataCheckRate) + "%");  // 데이터구성검수 구축율 (subRow[5]에 설정)
+                subRow.set(8, String.valueOf(secondCheckRate)+ "%"); // 2차검수 구축율 (subRow[7]에 설정)
 
             }
             // diseaseOrder 순서에 맞게 정렬
