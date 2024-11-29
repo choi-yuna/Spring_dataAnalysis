@@ -92,7 +92,7 @@ public class AnalyzeBoardServiceImpl {
     private void processFolderRecursively(ChannelSftp channelSftp, String folderPath, List<Map<String, Object>> resultList, Set<String> processedImageIds, boolean refresh) throws Exception {
         Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
         log.info("Found {} files in folder: {}", files.size(), folderPath);
-
+        log.info("{}",refresh);
         // JSON 파일 존재 여부와 refresh 파라미터에 따라 처리
         if (checkFileExistsInSFTP(channelSftp, folderPath, "analysis_result.json", "") && !refresh) {
             log.info("JSON result file already exists for folder: {}", folderPath);
@@ -108,7 +108,7 @@ public class AnalyzeBoardServiceImpl {
                     processedImageIds.add(imageId);  // 처리한 IMAGE_ID를 Set에 추가
                 }
             }
-
+            log.info("{}",filteredResults);
             resultList.addAll(filteredResults);
             return; // 추가 처리 건너뜁니다.
         }
@@ -193,7 +193,7 @@ public class AnalyzeBoardServiceImpl {
             resultData.put("INSTITUTION_ID", result.getOrDefault("INSTITUTION_ID", "N/A"));
             resultData.put("IMAGE_ID", result.getOrDefault("IMAGE_ID", "N/A"));
             resultData.put("라벨링등록건수", result.getOrDefault("라벨링등록건수", 0));
-            resultData.put("라벨링pass건수", result.getOrDefault("라벨링등록건수", 0));
+            resultData.put("라벨링pass건수", result.getOrDefault("라벨링pass건수", 0));
             resultData.put("1차검수", result.getOrDefault("1차검수", 0));
             resultData.put("2차검수", result.getOrDefault("2차검수", 0));
             jsonResultList.add(resultData);
@@ -208,12 +208,6 @@ public class AnalyzeBoardServiceImpl {
 
         // SFTP 서버에 저장 (폴더 경로 + 파일 이름 지정)
         String sftpFilePath = folderPath + "/analysis_result.json";
-
-        // SFTP에 이미 파일이 존재하는지 다시 한번 체크
-        if (checkFileExistsInSFTP(channelSftp, folderPath, "analysis_result.json", "")) {
-            log.info("JSON result file already exists. Skipping upload: {}", sftpFilePath);
-            return;
-        }
 
         SFTPClient.uploadFile(channelSftp, folderPath, "analysis_result.json", inputStream);
 
