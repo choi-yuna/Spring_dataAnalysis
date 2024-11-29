@@ -369,8 +369,8 @@ public class AnalyzeBoardServiceImpl {
 
         // JSON 파일 경로 설정
         String jsonFilePath = folderPath + (folderPath.contains("치주질환") ? "/Labelling/meta/" : "/Labelling/");
-        String labelingKey = folderPath.contains("치주질환") ? "Labeling_Info" : "Labeling_info";
-        String firstCheckKey = folderPath.contains("치주질환") ? "First_Check_Info" : "First_Check_info";
+//        String labelingKey = folderPath.contains("치주질환") ? "Labeling_Info" : "Labeling_info";
+//        String firstCheckKey = folderPath.contains("치주질환") ? "First_Check_Info" : "First_Check_info";
         String secondCheckKey = folderPath.contains("치주질환") ? "Second_Check_Info" : "Second_Check_info";
 
 
@@ -382,8 +382,8 @@ public class AnalyzeBoardServiceImpl {
 
 
             // 상태 추출
-            boolean labelingStatus = getJsonStatus(rootNode, labelingKey) == 2;
-            boolean firstCheckStatus = getJsonStatus(rootNode, firstCheckKey) == 2;
+//            boolean labelingStatus = getJsonStatus(rootNode, labelingKey) == 2;
+//            boolean firstCheckStatus = getJsonStatus(rootNode, firstCheckKey) == 2;
             boolean secondCheckStatus = getJsonStatus(rootNode, secondCheckKey) == 2;
 
 
@@ -392,9 +392,9 @@ public class AnalyzeBoardServiceImpl {
 //            if (labelingStatus) {
 //                incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링건수");
 //            }
-            if (firstCheckStatus) {
-                incrementStatus(resultList, institutionId, diseaseClass, imageId, "1차검수");
-            }
+//            if (firstCheckStatus) {
+//                incrementStatus(resultList, institutionId, diseaseClass, imageId, "1차검수");
+//            }
             if (secondCheckStatus) {
                 incrementStatus(resultList, institutionId, diseaseClass, imageId, "2차검수");
             }
