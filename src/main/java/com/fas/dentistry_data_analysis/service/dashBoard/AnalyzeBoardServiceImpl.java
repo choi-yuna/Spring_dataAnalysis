@@ -37,23 +37,20 @@ public class AnalyzeBoardServiceImpl {
         this.excelService = excelService;
     }
 
-
-    public Map<String, Object> processFilesInFolder(String folderPath) throws Exception {
+    public Map<String, Object> processFilesInFolder(String folderPath, boolean refresh) throws Exception {
         List<Map<String, Object>> resultList = new ArrayList<>();
 
         Session session = null;
         ChannelSftp channelSftp = null;
-        // 중복 처리용 전역 Set
-        Set<String> processedImageIds = new HashSet<>();  // 여기에 중복된 ID를 저장합니다.
+        Set<String> processedImageIds = new HashSet<>();  // 중복 처리용 전역 Set
 
         try {
             session = SFTPClient.createSession(SFTP_HOST, SFTP_USER, SFTP_PASSWORD, SFTP_PORT);
             channelSftp = SFTPClient.createSftpChannel(session);
 
             // 폴더 내 파일을 병렬로 처리
-            processFolderRecursively(channelSftp, folderPath, resultList, processedImageIds);
+            processFolderRecursively(channelSftp, folderPath, resultList, processedImageIds, refresh);
 
-            // 결과 리스트의 상태를 로그로 찍기
             log.info("Processed resultList: {}", resultList);
         } finally {
             if (channelSftp != null) channelSftp.disconnect();
@@ -63,26 +60,25 @@ public class AnalyzeBoardServiceImpl {
 
         Map<String, Object> response = new HashMap<>();
 
-        // "질환 ALL" 데이터 먼저 추가
+        // 질환별 데이터 그룹화
         List<Map<String, Object>> diseaseData = new ArrayList<>();
         diseaseData.add(dataGropedService.createDiseaseData(resultList, "INSTITUTION_ID", "질환 ALL"));
         diseaseData.addAll(dataGropedService.groupDataByDisease(resultList));  // 그룹화된 데이터 추가
         response.put("질환별", diseaseData);
 
-        // "기관 ALL" 데이터 먼저 추가
+        // 기관별 데이터 그룹화
         List<Map<String, Object>> institutionData = new ArrayList<>();
         institutionData.add(dataGropedService.createInstitutionData(resultList, "DISEASE_CLASS", "기관 ALL"));
         institutionData.addAll(dataGropedService.groupDataByInstitution(resultList));  // 그룹화된 데이터 추가
         response.put("기관별", institutionData);
 
-        // 중복 체크를 위한 IMAGE_ID 처리
+        // 중복 체크
         Set<String> uniqueImageIds = new HashSet<>();
-        int nullCount = 0;  // null값 확인용 카운트
+        int nullCount = 0;
 
         for (Map<String, Object> row : resultList) {
             String imageId = (String) row.get("IMAGE_ID");
 
-            // null값을 확인하고 카운트
             if (imageId == null) {
                 nullCount++;
             } else {
@@ -90,65 +86,55 @@ public class AnalyzeBoardServiceImpl {
             }
         }
 
-        // 중복된 IMAGE_ID의 수와 null count를 로그로 찍기
         log.info("Total number of unique image IDs: {}", uniqueImageIds.size());
         log.info("Number of null image IDs: {}", nullCount);
 
         return response;
     }
 
-    private void processFolderRecursively(ChannelSftp channelSftp, String folderPath, List<Map<String, Object>> resultList, Set<String> processedImageIds) throws Exception {
-        // 폴더 내 모든 .xlsx 파일 목록을 가져옵니다.
+    private void processFolderRecursively(ChannelSftp channelSftp, String folderPath, List<Map<String, Object>> resultList, Set<String> processedImageIds, boolean refresh) throws Exception {
         Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
         log.info("Found {} files in folder: {}", files.size(), folderPath);
 
-        // 폴더에 이미 분석한 결과를 저장한 JSON 파일이 있다면 데이터를 로드하고 처리 건너뜁니다.
-        if (checkFileExistsInSFTP(channelSftp, folderPath, "analysis_result.json", "")) {
+        // JSON 파일 존재 여부와 refresh 파라미터에 따라 처리
+        if (checkFileExistsInSFTP(channelSftp, folderPath, "analysis_result.json", "") && !refresh) {
             log.info("JSON result file already exists for folder: {}", folderPath);
 
-            // JSON 파일 로드하여 resultList에 추가
             List<Map<String, Object>> existingResults = loadResultsFromJsonSftp(folderPath, channelSftp);
 
-            // 기존 결과에서 중복된 IMAGE_ID를 제거
             List<Map<String, Object>> filteredResults = new ArrayList<>();
             for (Map<String, Object> result : existingResults) {
                 String imageId = (String) result.get("IMAGE_ID");
 
-                // 이미지 ID가 null이거나 이미 처리된 ID는 건너뜁니다.
                 if (imageId != null && !processedImageIds.contains(imageId)) {
                     filteredResults.add(result);
                     processedImageIds.add(imageId);  // 처리한 IMAGE_ID를 Set에 추가
                 }
             }
 
-            // 필터링된 결과만 resultList에 추가
             resultList.addAll(filteredResults);
-
             return; // 추가 처리 건너뜁니다.
         }
 
-        // 폴더별 독립적인 folderResultList 생성
+        // 결과를 새로 분석하는 로직
         List<Map<String, Object>> folderResultList = new ArrayList<>();
-        boolean isExcelFileProcessed = false; // 엑셀 파일 처리 여부 확인
+        boolean isExcelFileProcessed = false;
 
-        // ExecutorService 생성 (파일을 병렬로 처리하기 위해)
         int availableCores = Runtime.getRuntime().availableProcessors();
         ExecutorService executorService = Executors.newFixedThreadPool(availableCores);
-
         List<CompletableFuture<Void>> futures = new ArrayList<>();
-        AtomicBoolean stopSubfolderSearch = new AtomicBoolean(false); // 하위 폴더 탐색을 제어
+        AtomicBoolean stopSubfolderSearch = new AtomicBoolean(false);
 
         for (ChannelSftp.LsEntry entry : files) {
             String fileName = entry.getFilename();
             if (fileName.endsWith(".xlsx")) {
                 synchronized (processedImageIds) {
                     if (processedImageIds.contains(fileName)) {
-                        continue; // 이미 처리된 파일은 건너뜁니다.
+                        continue;
                     }
-                    processedImageIds.add(fileName); // 파일을 처리 목록에 추가
+                    processedImageIds.add(fileName);
                 }
 
-                // 각 .xlsx 파일에 대한 처리 작업을 병렬로 실행할 CompletableFuture로 래핑
                 futures.add(CompletableFuture.runAsync(() -> {
                     try {
                         processFile(channelSftp, folderPath, fileName, folderResultList, processedImageIds, stopSubfolderSearch);
@@ -157,25 +143,22 @@ public class AnalyzeBoardServiceImpl {
                     }
                 }, executorService));
 
-                isExcelFileProcessed = true; // 엑셀 파일 처리 여부를 true로 설정
-                stopSubfolderSearch.set(true); // 하위 폴더 탐색 중지
-                break; // 엑셀 파일을 처리했으므로 추가적으로 하위 폴더를 탐색할 필요가 없음
+                isExcelFileProcessed = true;
+                stopSubfolderSearch.set(true);
+                break;
             }
         }
 
-        // 모든 파일 처리 완료까지 기다림
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-
-        // 폴더별 결과를 누적 resultList에 추가
         resultList.addAll(folderResultList);
 
-        // 엑셀 파일이 처리된 경우 폴더별 JSON 파일로 결과 저장
+        // JSON 파일로 결과 저장
         if (isExcelFileProcessed) {
             saveResultsToJsonSftp(folderPath, folderResultList, channelSftp);
             log.info("Processed and saved results to JSON for folder: {}", folderPath);
         }
 
-        // 하위 폴더 탐색 진행 (stopSubfolderSearch가 false인 경우에만)
+        // 하위 폴더 탐색 진행
         if (!stopSubfolderSearch.get()) {
             for (ChannelSftp.LsEntry entry : files) {
                 if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
@@ -183,12 +166,11 @@ public class AnalyzeBoardServiceImpl {
                     if (subFolderPath.contains("/Labelling/Labelling")) {
                         continue;
                     }
-                    processFolderRecursively(channelSftp, subFolderPath, resultList, processedImageIds); // 하위 폴더 탐색
+                    processFolderRecursively(channelSftp, subFolderPath, resultList, processedImageIds, refresh);
                 }
             }
         }
 
-        // Executor 종료
         executorService.shutdown();
     }
 
