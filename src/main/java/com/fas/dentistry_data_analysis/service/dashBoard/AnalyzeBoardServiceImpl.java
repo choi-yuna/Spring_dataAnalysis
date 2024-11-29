@@ -36,7 +36,10 @@ public class AnalyzeBoardServiceImpl {
     }
 
     public Map<String, Object> processFilesInFolder(String folderPath, boolean refresh) throws Exception {
+        folderFileCache.clear();
+
         List<Map<String, Object>> resultList = new ArrayList<>();
+
 
         Session session = null;
         ChannelSftp channelSftp = null;
