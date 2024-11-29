@@ -81,5 +81,41 @@ public class SFTPClient {
             throw new SftpException(ChannelSftp.SSH_FX_FAILURE, "Failed to upload text file to SFTP", e);
         }
     }
-
+/**
+ * 연결테스트 로직
+ */
+//    public static void main(String[] args) {
+//   String host  = "210.126.75.11";  // SFTP 서버 IP
+//     int port  = 2024;  // SFTP 포트
+//       String user  = "master01";  // 사용자 계정
+//       String password  = "Master01!!!";  // 비밀번호
+//
+//        Session session = null;
+//        ChannelSftp channelSftp = null;
+//
+//        try {
+//            // 세션 생성
+//            session = SFTPClient.createSession(host, user, password, port);
+//            System.out.println("SFTP Session 연결 성공!");
+//
+//            // 채널 생성
+//            channelSftp = SFTPClient.createSftpChannel(session);
+//            System.out.println("SFTP Channel 연결 성공!");
+//
+//            // 연결 성공 여부 확인
+//            if (channelSftp.isConnected()) {
+//                System.out.println("SFTP 연결이 정상적으로 이루어졌습니다.");
+//            } else {
+//                System.out.println("SFTP 연결에 실패했습니다.");
+//            }
+//        } catch (Exception e) {
+//            System.err.println("SFTP 연결 중 오류 발생: " + e.getMessage());
+//            e.printStackTrace();
+//        } finally {
+//            // 연결 종료
+//            SFTPClient.disconnect(session, channelSftp);
+//            System.out.println("SFTP 연결 종료");
+//        }
+//    }
 }
+
