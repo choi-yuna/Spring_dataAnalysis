@@ -51,7 +51,6 @@ public class AnalyzeBoardServiceImpl {
             // 폴더 내 파일을 병렬로 처리
             processFolderRecursively(channelSftp, folderPath, resultList, processedImageIds, refresh);
 
-            log.info("Processed resultList: {}", resultList);
         } finally {
             if (channelSftp != null) channelSftp.disconnect();
             if (session != null) session.disconnect();
