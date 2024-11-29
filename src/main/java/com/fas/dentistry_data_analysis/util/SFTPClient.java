@@ -63,4 +63,23 @@ public class SFTPClient {
             session.disconnect();
         }
     }
+
+    // SFTP 서버에 텍스트 파일 업로드 메서드
+    public static void uploadTextFile(ChannelSftp channelSftp, String folderPath, String fileName, String content) throws SftpException {
+        if (folderPath == null || fileName == null || folderPath.isEmpty() || fileName.isEmpty()) {
+            throw new IllegalArgumentException("Folder path or file name cannot be null or empty.");
+        }
+
+        if (content == null) {
+            content = ""; // 내용이 null인 경우 빈 문자열로 처리
+        }
+
+        // 텍스트 내용을 InputStream으로 변환
+        try (InputStream inputStream = new java.io.ByteArrayInputStream(content.getBytes(java.nio.charset.StandardCharsets.UTF_8))) {
+            channelSftp.put(inputStream, folderPath + "/" + fileName);
+        } catch (Exception e) {
+            throw new SftpException(ChannelSftp.SSH_FX_FAILURE, "Failed to upload text file to SFTP", e);
+        }
+    }
+
 }

@@ -18,7 +18,7 @@ import java.util.concurrent.ExecutionException;
 @RequestMapping("/api")
 public class ExcelAnalyzeController {
 
-    private final String folderPath = "/치의학데이터 과제 데이터 수집/내부 데이터/CSU/두개안면기형";
+    private final String folderPath = "/치의학데이터 과제 데이터 수집/내부 데이터/BRM/치주질환";
 
 
   //  private final DataAnalysisService dataAnalysisService;
@@ -32,10 +32,13 @@ public class ExcelAnalyzeController {
     }
 
     @PostMapping("/dashboard")
-    public ResponseEntity<?> dashboardData() throws Exception {
-        Map<String, Object>   stringObjectMap = analyzeBoardService.processFilesInFolder(folderPath);
+    public ResponseEntity<?> dashboardData(@RequestParam(value = "refresh", defaultValue = "false") boolean refresh) throws Exception {
+        log.info("{}",refresh);
+        // processFilesInFolder 메서드에 refresh 파라미터 전달
+        Map<String, Object> stringObjectMap = analyzeBoardService.processFilesInFolder(folderPath, refresh);
         return ResponseEntity.ok(Map.of("data", stringObjectMap));
     }
+
     // 기존 분석 API
 //    @PostMapping("/analyze")
 //    public ResponseEntity<?> analyzeData(@RequestBody AnalysisRequestDTO request) {
