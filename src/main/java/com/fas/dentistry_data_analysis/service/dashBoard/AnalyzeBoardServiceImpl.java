@@ -104,17 +104,7 @@ public class AnalyzeBoardServiceImpl {
 
             List<Map<String, Object>> existingResults = loadResultsFromJsonSftp(folderPath, channelSftp);
 
-            List<Map<String, Object>> filteredResults = new ArrayList<>();
-            for (Map<String, Object> result : existingResults) {
-                String imageId = (String) result.get("IMAGE_ID");
-
-                if (imageId != null && !processedImageIds.contains(imageId)) {
-                    filteredResults.add(result);
-                    processedImageIds.add(imageId);  // 처리한 IMAGE_ID를 Set에 추가
-                }
-            }
-            log.info("{}",filteredResults);
-            resultList.addAll(filteredResults);
+            resultList.addAll(existingResults);
             return; // 추가 처리 건너뜁니다.
         }
 
@@ -196,7 +186,6 @@ public class AnalyzeBoardServiceImpl {
             Map<String, Object> resultData = new HashMap<>();
             resultData.put("DISEASE_CLASS", result.getOrDefault("DISEASE_CLASS", "N/A"));
             resultData.put("INSTITUTION_ID", result.getOrDefault("INSTITUTION_ID", "N/A"));
-            resultData.put("IMAGE_ID", result.getOrDefault("IMAGE_ID", "N/A"));
             resultData.put("라벨링등록건수", result.getOrDefault("라벨링등록건수", 0));
             resultData.put("라벨링pass건수", result.getOrDefault("라벨링pass건수", 0));
             resultData.put("1차검수", result.getOrDefault("1차검수", 0));
