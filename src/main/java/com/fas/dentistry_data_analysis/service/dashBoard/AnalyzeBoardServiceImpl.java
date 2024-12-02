@@ -36,6 +36,7 @@ public class AnalyzeBoardServiceImpl {
     }
 
     public Map<String, Object> processFilesInFolder(String folderPath, boolean refresh) throws Exception {
+        // 캐싱된 폴더리스트 초기화
         folderFileCache.clear();
 
         List<Map<String, Object>> resultList = new ArrayList<>();
