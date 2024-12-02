@@ -23,6 +23,8 @@ public class DataGropedService {
         Map<String, Integer> KRU = new HashMap<>();
         KRU.put("치주질환", 1400);
         KRU.put("두개안면", 400);
+        KRU.put("골수염", 1000);
+        KRU.put("구강암", 50);
         institutionDiseaseGoals.put("고려대학교", KRU);
 
         Map<String, Integer> SNU = new HashMap<>();
@@ -36,14 +38,17 @@ public class DataGropedService {
 
         Map<String, Integer> DKU = new HashMap<>();
         DKU.put("골수염", 1408);
+        DKU.put("두개안면", 200);
         institutionDiseaseGoals.put("단국대학교", DKU);
 
         Map<String, Integer> CSU = new HashMap<>();
         CSU.put("골수염", 1260);
-        institutionDiseaseGoals.put("조선대", CSU);
+        CSU.put("두개안면", 400);
+        institutionDiseaseGoals.put("조선대학교", CSU);
 
         Map<String, Integer> BRM = new HashMap<>();
         BRM.put("치주질환", 1200);
+        BRM.put("골수염", 272);
         BRM.put("구강암", 12);
         institutionDiseaseGoals.put("보라매병원", BRM);
     }
@@ -51,15 +56,12 @@ public class DataGropedService {
 
     public List<Map<String, Object>> groupDataByDisease(List<Map<String, Object>> resultList) {
         Map<String, Map<String, Object>> groupedData = new HashMap<>();
-        Set<String> processedImageIds = new HashSet<>(); // IMAGE_ID 중복 체크
         Map<String, Set<String>> processedInstitutions = new HashMap<>(); // 각 질환별로 처리된 기관 기록
 
         // 데이터를 질환별로 그룹화
         for (Map<String, Object> item : resultList) {
             String diseaseClass = (String) item.get("DISEASE_CLASS");
             String institutionId = (String) item.get("INSTITUTION_ID");
-            String imageId = (String) item.get("IMAGE_ID");
-
             // 질환별 데이터 그룹화
             groupedData.putIfAbsent(diseaseClass, new HashMap<>());
             Map<String, Object> diseaseData = groupedData.get(diseaseClass);
@@ -67,13 +69,6 @@ public class DataGropedService {
             diseaseData.putIfAbsent("totalData", new ArrayList<>(Collections.nCopies(6, 0))); // 초기값 설정
             diseaseData.putIfAbsent("subData", new ArrayList<>());
 
-            // 중복된 IMAGE_ID는 건너뜁니다.
-            if (processedImageIds.contains(imageId)) {
-                continue;
-            }
-
-            // IMAGE_ID를 처리한 것으로 표시
-            processedImageIds.add(imageId);
 
             // 총합 계산 (목표건수, 1차검수, 2차검수, 라벨링건수 등)
             List<Integer> totalData = (List<Integer>) diseaseData.get("totalData");
@@ -111,18 +106,20 @@ public class DataGropedService {
             subRow.add(String.valueOf(secondCheck));
             subRow.add("0"); // 2차검수 구축율
 
-            // subData에 기관 정보 추가
+            // subData에 기관 정보 추가 (누적값 처리)
             List<List<String>> subData = (List<List<String>>) diseaseData.get("subData");
             boolean exists = false;
             for (List<String> existingSubRow : subData) {
                 if (existingSubRow.get(0).equals(institutionId)) {
-                    existingSubRow.set(2, String.valueOf(Integer.parseInt(existingSubRow.get(2)) + labelingCount));
-                    existingSubRow.set(3, String.valueOf(Integer.parseInt(existingSubRow.get(3)) + firstCheck));
-                    existingSubRow.set(5, String.valueOf(Integer.parseInt(existingSubRow.get(5)) + secondCheck));
+                    existingSubRow.set(2, String.valueOf(Integer.parseInt(existingSubRow.get(2)) + labelingCount)); // 라벨링 건수 누적
+                    existingSubRow.set(3, String.valueOf(Integer.parseInt(existingSubRow.get(3)) + firstCheck)); // 1차검수 건수 누적
+                    existingSubRow.set(5, String.valueOf(Integer.parseInt(existingSubRow.get(5)) + secondCheck)); // 2차검수 건수 누적
                     exists = true;
                     break;
                 }
             }
+
+            // 만약 해당 기관이 subData에 없으면 새로 추가
             if (!exists) {
                 subData.add(subRow);
             }
@@ -165,7 +162,6 @@ public class DataGropedService {
 
     public List<Map<String, Object>> groupDataByInstitution(List<Map<String, Object>> resultList) {
         Map<String, Map<String, Object>> groupedData = new HashMap<>();
-        Set<String> processedImageIds = new HashSet<>();  // IMAGE_ID 중복 체크
 
         // 기관별로 처리한 질환을 추적하기 위한 구조
         Map<String, Set<String>> processedDiseasesByInstitution = new HashMap<>();
@@ -174,7 +170,6 @@ public class DataGropedService {
         for (Map<String, Object> item : resultList) {
             String institutionId = (String) item.get("INSTITUTION_ID");
             String diseaseClass = (String) item.get("DISEASE_CLASS");
-            String imageId = (String) item.get("IMAGE_ID");
 
             // 기관별 데이터 그룹화
             if (!groupedData.containsKey(institutionId)) {
@@ -188,14 +183,6 @@ public class DataGropedService {
             }
 
             Map<String, Object> institutionData = groupedData.get(institutionId);
-
-            // 중복된 IMAGE_ID는 건너뜁니다.
-            if (processedImageIds.contains(imageId)) {
-                continue;
-            }
-
-            // IMAGE_ID를 처리한 것으로 표시
-            processedImageIds.add(imageId);
 
             // 각 질환별 목표 건수를 기관별 데이터에서 가져오기
             int goalCount = institutionDiseaseGoals

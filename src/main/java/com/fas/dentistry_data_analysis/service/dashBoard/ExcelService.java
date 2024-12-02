@@ -76,6 +76,7 @@ public class ExcelService {
                 if (imageIdIndex != null) {
                     Cell imageIdCell = row.getCell(imageIdIndex);
                     String imageIdValue = (imageIdCell != null) ? ExcelUtils.getCellValueAsString(imageIdCell) : "";
+                    if (imageIdValue == null || imageIdValue.isEmpty()) {continue;}
                     rowData.put("IMAGE_ID", imageIdValue);
                 }
 
