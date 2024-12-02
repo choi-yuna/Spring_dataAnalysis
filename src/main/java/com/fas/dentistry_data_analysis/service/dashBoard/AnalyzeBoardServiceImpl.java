@@ -14,6 +14,7 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -245,42 +246,82 @@ public class AnalyzeBoardServiceImpl {
 
         // 상태 업데이트
         if (allKeysExist) {
-            incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수");
+            incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수",null);
         }
     }
 
 
-    //질환별 폴더 확인 로직
-    private void processFile(ChannelSftp channelSftp, String folderPath, String fileName, List<Map<String, Object>> resultList, Set<String> processedImageIds, AtomicBoolean stopSubfolderSearch) throws Exception {
+    private void processFile(ChannelSftp channelSftp, String folderPath, String fileName,
+                             List<Map<String, Object>> resultList, Set<String> processedImageIds,
+                             AtomicBoolean stopSubfolderSearch) throws Exception {
         InputStream inputStream = SFTPClient.readFile(channelSftp, folderPath, fileName);
 
         // 엑셀 파일 처리
         List<Map<String, Object>> filteredData = excelService.processExcelFile(inputStream);
 
-        // 중복된 IMAGE_ID 처리
+        // JSON 파일 경로 확인
+        String jsonPath = folderPath.contains("치주질환") ? folderPath + "/Labelling/meta" : folderPath + "/Labelling";
+        Set<String> jsonFiles = folderFileCache.computeIfAbsent(jsonPath, path -> {
+            try {
+                Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, path);
+                return files.stream()
+                        .map(ChannelSftp.LsEntry::getFilename)
+                        .filter(name -> name.endsWith(".json"))
+                        .collect(Collectors.toSet());
+            } catch (SftpException e) {
+                return Collections.emptySet();
+            }
+        });
+
+        // 엑셀 데이터에서 DISEASE_CLASS와 INSTITUTION_ID 추출
+        String diseaseClass = null;
+        String institutionId = null;
+
+        for (Map<String, Object> row : filteredData) {
+            diseaseClass = (String) row.get("DISEASE_CLASS");
+            institutionId = (String) row.get("INSTITUTION_ID");
+            if (institutionId != null) break;
+        }
+
+        // JSON 파일에서 DISEASE_CLASS와 INSTITUTION_ID 추출
+        if (diseaseClass == null || institutionId == null) {
+            for (String jsonFileName : jsonFiles) {
+                Map<String, String> jsonData = extractInstitutionAndDiseaseFromJson(channelSftp, jsonPath, jsonFileName);
+                if (jsonData.get("DISEASE_CLASS") != null) {
+                    diseaseClass = jsonData.get("DISEASE_CLASS");
+                }
+                if (jsonData.get("INSTITUTION_ID") != null) {
+                    institutionId = jsonData.get("INSTITUTION_ID");
+                }
+                if (diseaseClass != null && institutionId != null) break; // 값이 모두 추출되면 종료
+            }
+        }
+
+        if (diseaseClass == null || institutionId == null) {
+            log.warn("Unable to determine DISEASE_CLASS or INSTITUTION_ID for file: {}", fileName);
+            return; // 필수 데이터가 없으면 중단
+        }
+
+        // JSON 파일 개수로 라벨링등록건수 설정
+        if (!jsonFiles.isEmpty()) {
+            incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링등록건수", jsonFiles.size());
+        }
+
+        // ID별 파일 처리 (기존 로직 유지)
         for (Map<String, Object> row : filteredData) {
             String imageId = (String) row.get("IMAGE_ID");
 
-            // 이미 처리된 imageId는 건너뛰기
-            if (processedImageIds.contains(imageId)) {
-                continue;
-            }
-
-            // 아직 처리되지 않은 imageId는 처리 리스트에 추가
+            if (processedImageIds.contains(imageId)) continue;
             processedImageIds.add(imageId);
 
+            boolean jsonExists = jsonFiles.stream().anyMatch(name -> name.contains(imageId));
+            if (!jsonExists) continue;
 
+            // 추가 처리 로직
+            processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
 
-            // 상태 업데이트
-            String diseaseClass = (String) row.get("DISEASE_CLASS");
-            String institutionId = (String) row.get("INSTITUTION_ID");
-            if (institutionId == null) {
-                continue; // null 데이터를 건너뜁니다.
-            }
-
-            // 파일 존재 여부를 확인하는 부분 (치주질환 폴더 확인)
+    // 파일 존재 여부를 확인하는 부분 (치주질환 폴더 확인)
             boolean dcmExists = false;
-            boolean jsonExists = false;
             boolean iniExists = false;
             boolean toothExists = false;
             boolean tlaExists = false;
@@ -298,9 +339,8 @@ public class AnalyzeBoardServiceImpl {
                 cejExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/cej");
                 alveExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/alve");
                 if(jsonExists) {
-                    incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링등록건수");
                     if ((dcmExists && iniExists && toothExists && tlaExists && cejExists && alveExists)) {
-                        incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수");
+                        incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수",null);
                         processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
                         stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
                     } else {
@@ -314,7 +354,6 @@ public class AnalyzeBoardServiceImpl {
                 log.info("{}",imageId);
                 log.info("{}",jsonExists);
                 if (jsonExists) {
-                    incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링등록건수");
                     try (InputStream jsonInputStream = SFTPClient.readFile(channelSftp, folderPath+"/Labelling", imageId + ".json")) {
                         // JSON 데이터 처리
                         processJsonInputStream(jsonInputStream, resultList, institutionId, diseaseClass, imageId);
@@ -330,9 +369,8 @@ public class AnalyzeBoardServiceImpl {
                 iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
                 labellingExists = checkLabellingFileExistsInSFTPForImageId(channelSftp, folderPath+"/Labelling/Labelling", imageId);
                 if (jsonExists) {
-                    incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링등록건수");
                     if ((dcmExists && labellingExists && iniExists)) {
-                        incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수");
+                        incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수",null);
                         processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
                         stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
                     } else {
@@ -346,6 +384,7 @@ public class AnalyzeBoardServiceImpl {
         }
 
     }
+
 
     private boolean checkFileExistsInSFTPForImageId(ChannelSftp channelSftp, String folderPath, String imageId) throws SftpException {
         // 지정된 경로(folderPath) 내에서만 파일과 폴더를 검색합니다.
@@ -424,27 +463,51 @@ public class AnalyzeBoardServiceImpl {
 //                incrementStatus(resultList, institutionId, diseaseClass, imageId, "1차검수");
 //            }
             if (secondCheckStatus) {
-                incrementStatus(resultList, institutionId, diseaseClass, imageId, "2차검수");
+                incrementStatus(resultList, institutionId, diseaseClass, imageId, "2차검수",null);
             }
         } catch (Exception e) {
             log.error("Error while processing JSON file for Image ID: {}", imageId, e);
         }
     }
+    private Map<String, String> extractInstitutionAndDiseaseFromJson(ChannelSftp channelSftp, String folderPath, String jsonFileName) throws Exception {
+        // JSON 파일 읽기
+        try (InputStream inputStream = SFTPClient.readFile(channelSftp, folderPath, jsonFileName)) {
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode rootNode = objectMapper.readTree(inputStream);
+
+            // DISEASE_CLASS와 INSTITUTION_ID 추출
+            String diseaseClass = rootNode.path("DISEASE_CLASS").asText(null);
+            String institutionId = rootNode.path("INSTITUTION_ID").asText(null);
+
+            // 결과를 Map으로 반환
+            Map<String, String> result = new HashMap<>();
+            result.put("DISEASE_CLASS", diseaseClass);
+            result.put("INSTITUTION_ID", institutionId);
+
+            return result;
+        } catch (Exception e) {
+            log.error("Error reading JSON file {}: {}", jsonFileName, e.getMessage());
+            return Collections.emptyMap(); // 읽기 실패 시 빈 Map 반환
+        }
+    }
+
 
     // 중복된 IMAGE_ID를 처리하는 방식 개선
-    private void incrementStatus(List<Map<String, Object>> resultList, String institutionId, String diseaseClass, String imageId, String status) {
-        // IMAGE_ID, INSTITUTION_ID, DISEASE_CLASS를 기준으로 항목을 찾습니다.
+    // 질환별, 기관별 데이터를 그룹화하여 처리
+    private void incrementStatus(List<Map<String, Object>> resultList, String institutionId, String diseaseClass,
+                                 String imageId, String status, Integer incrementValue) {
+        // INSTITUTION_ID와 DISEASE_CLASS를 기준으로 항목을 찾습니다.
         Optional<Map<String, Object>> existing = resultList.stream()
-                .filter(item -> imageId.equals(item.get("IMAGE_ID")) && institutionId.equals(item.get("INSTITUTION_ID"))
-                        && (diseaseClass != null && diseaseClass.equals(item.get("DISEASE_CLASS"))))  // null 체크 추가
+                .filter(item -> institutionId.equals(item.get("INSTITUTION_ID"))
+                        && diseaseClass.equals(item.get("DISEASE_CLASS")))  // IMAGE_ID는 제거
                 .findFirst();
+
         // 해당 항목이 없다면 새로 추가합니다.
         if (existing.isEmpty()) {
             Map<String, Object> newEntry = new HashMap<>();
-            newEntry.put("IMAGE_ID", imageId);
             newEntry.put("INSTITUTION_ID", institutionId);
-            newEntry.put("DISEASE_CLASS", diseaseClass);  // diseaseClass 값도 추가
-            newEntry.put("목표건수", 0);  // 목표건수는 나중에 계산
+            newEntry.put("DISEASE_CLASS", diseaseClass);  // DISEASE_CLASS 추가
+            newEntry.put("목표건수", 0);  // 목표건수는 초기화
             newEntry.put("라벨링등록건수", 0);
             newEntry.put("라벨링pass건수", 0);
             newEntry.put("1차검수", 0);
@@ -456,12 +519,13 @@ public class AnalyzeBoardServiceImpl {
 
         Map<String, Object> statusMap = existing.get();
 
-        // 각 상태별 카운트 (벨링건수, 1차검수, 2차검수) 증가
+        // 상태 값 증가 (incrementValue가 null이면 기본 1 증가)
+        int increment = (incrementValue != null) ? incrementValue : 1;
         Integer currentStatusValue = (Integer) statusMap.get(status);
         if (currentStatusValue == null) {
             currentStatusValue = 0;
         }
-        statusMap.put(status, currentStatusValue + 1);
+        statusMap.put(status, currentStatusValue + increment);
     }
 
 
