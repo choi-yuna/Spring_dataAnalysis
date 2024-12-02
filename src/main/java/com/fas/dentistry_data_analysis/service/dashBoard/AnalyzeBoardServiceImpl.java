@@ -36,7 +36,6 @@ public class AnalyzeBoardServiceImpl {
     }
 
     public Map<String, Object> processFilesInFolder(String folderPath, boolean refresh) throws Exception {
-        // 캐싱된 폴더리스트 초기화
         folderFileCache.clear();
 
         List<Map<String, Object>> resultList = new ArrayList<>();
@@ -219,6 +218,36 @@ public class AnalyzeBoardServiceImpl {
     }
 
 
+    private void processJsonInputStream(InputStream jsonInputStream, List<Map<String, Object>> resultList, String institutionId, String diseaseClass, String imageId) throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode rootNode = objectMapper.readTree(jsonInputStream);
+
+        // Annotation_Data 확인 로직
+        JsonNode annotationData = rootNode.get("Annotation_Data");
+        boolean allKeysExist = false;
+
+        if (annotationData != null && annotationData.isArray() && annotationData.size() > 0) {
+            JsonNode firstAnnotation = annotationData.get(0); // 첫 번째 Annotation_Data만 검사
+            List<String> requiredKeys = Arrays.asList(
+                    "LM_S", "LM_N", "LM_POR", "LM_POL", "LM_ORR", "LM_ORL",
+                    "LM_ARR", "LM_ARL", "LM_ANS", "LM_PNS", "LM_A", "LM_SPR",
+                    "LM_ID", "LM_B", "LM_POG", "LM_GN", "LM_ME", "LM_GOR",
+                    "LM_GOL", "LM_COR", "LM_COL", "LM_U1R", "LM_U1L", "LM_U1AR",
+                    "LM_U1AL", "LM_L1R", "LM_L1L", "LM_L1AR", "LM_L1AL", "LM_U3R",
+                    "LM_U3L", "LM_L3R", "LM_L3L", "LM_U6R", "LM_U6L", "LM_UA6R",
+                    "LM_UA6L", "LM_L6R", "LM_L6L", "LM_LA6R", "LM_LA6L", "LM_FZPR",
+                    "LM_FZPL", "LM_MR", "LM_ML"
+            );
+
+            // 모든 키가 존재하는지 확인
+            allKeysExist = requiredKeys.stream().allMatch(firstAnnotation::has);
+        }
+
+        // 상태 업데이트
+        if (allKeysExist) {
+            incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수");
+        }
+    }
 
 
     //질환별 폴더 확인 로직
@@ -272,20 +301,6 @@ public class AnalyzeBoardServiceImpl {
                     incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링등록건수");
                     if ((dcmExists && iniExists && toothExists && tlaExists && cejExists && alveExists)) {
                         incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수");
-                            processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
-                            stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
-                    } else {
-
-                        stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
-                    }
-                }
-            }
-            else if (folderPath.contains("두개안면")) {
-                jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
-                if(jsonExists) {
-                    incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링등록건수");
-                    if ((dcmExists && iniExists && toothExists && tlaExists && cejExists && alveExists)) {
-                        incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수");
                         processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
                         stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
                     } else {
@@ -294,6 +309,21 @@ public class AnalyzeBoardServiceImpl {
                     }
                 }
             }
+            else if (folderPath.contains("두개안면")) {
+                jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
+                log.info("{}",imageId);
+                log.info("{}",jsonExists);
+                if (jsonExists) {
+                    incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링등록건수");
+                    try (InputStream jsonInputStream = SFTPClient.readFile(channelSftp, folderPath+"/Labelling", imageId + ".json")) {
+                        // JSON 데이터 처리
+                        processJsonInputStream(jsonInputStream, resultList, institutionId, diseaseClass, imageId);
+                    } catch (Exception e) {
+                        log.error("Error processing JSON file for Image ID: {}", imageId, e);
+                    }
+                }
+            }
+
             else {
                 dcmExists = checkFileExistsInSFTPForImageId(channelSftp, folderPath, imageId);
                 jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
