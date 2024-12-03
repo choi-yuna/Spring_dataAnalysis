@@ -366,7 +366,7 @@ public class AnalyzeBoardServiceImpl {
                 dcmExists = checkFileExistsInSFTPForImageId(channelSftp, folderPath, imageId);
                 jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
                 iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
-                labellingExists = checkLabellingFileExistsInSFTPForImageId(channelSftp, folderPath+"/Labelling/Labelling", imageId);
+                labellingExists = checkLabellingFileExistsInSFTPForImageId(channelSftp,folderPath+"/Labelling/Labelling", imageId);
                 if (jsonExists) {
                     if ((dcmExists && labellingExists && iniExists)) {
                         incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수",null);
@@ -384,44 +384,72 @@ public class AnalyzeBoardServiceImpl {
 
     }
     private boolean checkFileExistsInSFTPForImageId(ChannelSftp channelSftp, String folderPath, String imageId) throws SftpException {
-        // 지정된 경로(folderPath) 내에서만 파일과 폴더를 검색합니다.
-        Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
-
-        // 주어진 경로에서 imageId와 일치하는 폴더를 찾습니다
-        for (ChannelSftp.LsEntry entry : files) {
-            // 폴더 이름에 imageId가 포함된 경우
-            if (entry.getAttrs().isDir() && entry.getFilename().contains(imageId)) {
-                String targetFolderPath = folderPath + "/" + entry.getFilename();  // 해당 폴더 경로
-
-                // 해당 폴더 내에서 .dcm 확장자를 가진 파일이 하나라도 있는지 확인
-                Vector<ChannelSftp.LsEntry> subFiles = SFTPClient.listFiles(channelSftp, targetFolderPath);
-                for (ChannelSftp.LsEntry subEntry : subFiles) {
-                    if (subEntry.getFilename().endsWith(".dcm")) {
-                        return true;  // .dcm 파일이 하나라도 있으면 true 반환
+        // 주어진 경로에 대한 캐시를 초기화하거나 가져옴
+        Set<String> cachedFolders = folderFileCache.computeIfAbsent(folderPath, path -> {
+            try {
+                Vector<ChannelSftp.LsEntry> entries = SFTPClient.listFiles(channelSftp, path);
+                Set<String> folderNames = new HashSet<>();
+                for (ChannelSftp.LsEntry entry : entries) {
+                    if (entry.getAttrs().isDir()) { // 디렉토리만 추가
+                        folderNames.add(entry.getFilename());
                     }
                 }
-
-                // .dcm 파일을 찾지 못한 경우 false 반환
-                return false;
+                return folderNames;
+            } catch (SftpException e) {
+                // 폴더 목록을 가져오는 데 실패한 경우
+                return Collections.emptySet();
             }
+        });
+
+        // 폴더 이름 중 imageId를 포함하는 폴더 찾기
+        Optional<String> matchingFolder = cachedFolders.stream()
+                .filter(folderName -> folderName.contains(imageId))
+                .findFirst();
+
+        if (matchingFolder.isPresent()) {
+            String targetFolderPath = folderPath + "/" + matchingFolder.get();
+
+            // 해당 폴더 내 파일 캐시 초기화 또는 가져오기
+            Set<String> cachedFiles = folderFileCache.computeIfAbsent(targetFolderPath, path -> {
+                try {
+                    Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, path);
+                    Set<String> fileNames = new HashSet<>();
+                    for (ChannelSftp.LsEntry entry : files) {
+                        fileNames.add(entry.getFilename());
+                    }
+                    return fileNames;
+                } catch (SftpException e) {
+                    // 파일 목록을 가져오는 데 실패한 경우
+                    return Collections.emptySet();
+                }
+            });
+
+            // .dcm 파일이 존재하는지 확인
+            return cachedFiles.stream().anyMatch(fileName -> fileName.endsWith(".dcm"));
         }
+
         return false;
     }
 
-    private boolean checkLabellingFileExistsInSFTPForImageId(ChannelSftp channelSftp, String folderPath, String imageId) throws SftpException {
-        // 지정된 경로(folderPath) 내에서만 파일과 폴더를 검색합니다.
-        Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
-        // 주어진 경로에서 imageId와 일치하는 폴더를 찾습니다
-        for (ChannelSftp.LsEntry entry : files) {
-            // 폴더 이름에 imageId가 포함된 경우 true 반환
-            if (entry.getAttrs().isDir() && entry.getFilename().contains(imageId)) {
-                return true;
-            }
-        }
 
-        // imageId를 포함하는 폴더를 찾지 못하면 false 반환
-        return false;
+    private boolean checkLabellingFileExistsInSFTPForImageId(ChannelSftp channelSftp, String folderPath, String imageId) {
+        // 캐시에서 파일/폴더 세트를 가져오거나 초기화
+        Set<String> filesInCache = folderFileCache.computeIfAbsent(folderPath, path -> {
+            try {
+                Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, path);
+                return files.stream()
+                        .map(ChannelSftp.LsEntry::getFilename)
+                        .collect(Collectors.toSet());
+            } catch (SftpException e) {
+                log.error("Failed to list files in folder: {}", path, e);
+                return Collections.emptySet();
+            }
+        });
+
+        // 캐시에서 imageId를 포함하는 파일/폴더 이름이 있는지 확인
+        return filesInCache.stream().anyMatch(name -> name.contains(imageId));
     }
+
 
 
     /**
