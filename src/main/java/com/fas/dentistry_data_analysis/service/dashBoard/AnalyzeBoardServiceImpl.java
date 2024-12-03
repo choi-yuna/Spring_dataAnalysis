@@ -21,15 +21,15 @@ import java.util.stream.Collectors;
 @Service
 public class AnalyzeBoardServiceImpl {
     //원광대 서버 정보
-    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
-    private static final int SFTP_PORT = 2024;  // SFTP 포트
-    private static final String SFTP_USER = "master01";  // 사용자 계정
-    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
+//    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
+//    private static final int SFTP_PORT = 2024;  // SFTP 포트
+//    private static final String SFTP_USER = "master01";  // 사용자 계정
+//    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
     // SFTP 서버 정보
-//    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
-//    private static final int SFTP_PORT = 22;  // SFTP 포트
-//    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
-//    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
+    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
+    private static final int SFTP_PORT = 22;  // SFTP 포트
+    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
+    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
 
     private final DataGropedService dataGropedService;
     private final ExcelService excelService;
@@ -251,6 +251,7 @@ public class AnalyzeBoardServiceImpl {
     }
 
 
+    //질환별 폴더 확인 로직
     private void processFile(ChannelSftp channelSftp, String folderPath, String fileName,
                              List<Map<String, Object>> resultList, Set<String> processedImageIds,
                              AtomicBoolean stopSubfolderSearch) throws Exception {
@@ -317,73 +318,71 @@ public class AnalyzeBoardServiceImpl {
             if (imageIdsFromExcel.contains(imageId)) {
                 boolean jsonExists = jsonFiles.stream().anyMatch(name -> name.contains(imageId));
                 if (!jsonExists) continue;
+            }
 
-                // 추가 처리 로직
-                processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
+            // 파일 존재 여부를 확인하는 부분 (치주질환 폴더 확인)
+            boolean dcmExists = false;
+            boolean jsonExists = false;
+            boolean iniExists = false;
+            boolean toothExists = false;
+            boolean tlaExists = false;
+            boolean cejExists = false;
+            boolean alveExists = false;
+            boolean labellingExists = false;
 
-                // 파일 존재 여부 확인 (치주질환 폴더 체크)
-                if (folderPath.contains("치주질환")) {
-                    handlePeriodontalDiseases(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass, stopSubfolderSearch);
-                } else if (folderPath.contains("두개안면")) {
-                    handleCraniofacialDiseases(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
-                } else {
-                    handleOtherDiseases(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass, stopSubfolderSearch);
+
+            if (folderPath.contains("치주질환")) {
+                dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm", "");
+                jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling/meta");
+                iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
+                toothExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/tooth");
+                tlaExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/tla");
+                cejExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/cej");
+                alveExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/alve");
+                if(jsonExists) {
+                    if ((dcmExists && iniExists && toothExists && tlaExists && cejExists && alveExists)) {
+                        incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수",null);
+                        processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
+                        stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
+                    } else {
+
+                        stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
+                    }
                 }
             }
-        }
-    }
-
-    private void handlePeriodontalDiseases(ChannelSftp channelSftp, String folderPath, String imageId,
-                                           List<Map<String, Object>> resultList, String institutionId, String diseaseClass,
-                                           AtomicBoolean stopSubfolderSearch) throws Exception {
-        // 치주질환에 대한 파일 존재 여부 확인 및 상태 업데이트
-        boolean jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling/meta");
-        boolean dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm", "");
-        boolean iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
-        boolean toothExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/tooth");
-        boolean tlaExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/tla");
-        boolean cejExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/cej");
-        boolean alveExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/alve");
-
-        if (jsonExists && dcmExists && iniExists && toothExists && tlaExists && cejExists && alveExists) {
-            incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수", null);
-            processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
-            stopSubfolderSearch.set(true);
-        } else {
-            stopSubfolderSearch.set(true);
-        }
-    }
-
-    private void handleCraniofacialDiseases(ChannelSftp channelSftp, String folderPath, String imageId,
-                                            List<Map<String, Object>> resultList, String institutionId, String diseaseClass) throws Exception {
-        boolean jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
-        if (jsonExists) {
-            try (InputStream jsonInputStream = SFTPClient.readFile(channelSftp, folderPath + "/Labelling", imageId + ".json")) {
-                processJsonInputStream(jsonInputStream, resultList, institutionId, diseaseClass, imageId);
-            } catch (Exception e) {
-                log.error("Error processing JSON file for Image ID: {}", imageId, e);
+            else if (folderPath.contains("두개안면")) {
+                jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
+                if (jsonExists) {
+                    try (InputStream jsonInputStream = SFTPClient.readFile(channelSftp, folderPath, imageId + ".json")) {
+                        // JSON 데이터 처리
+                        processJsonInputStream(jsonInputStream, resultList, institutionId, diseaseClass, imageId);
+                    } catch (Exception e) {
+                        log.error("Error processing JSON file for Image ID: {}", imageId, e);
+                    }
+                }
             }
+
+            else {
+                dcmExists = checkFileExistsInSFTPForImageId(channelSftp, folderPath, imageId);
+                jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
+                iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
+                labellingExists = checkLabellingFileExistsInSFTPForImageId(channelSftp, folderPath+"/Labelling/Labelling", imageId);
+                if (jsonExists) {
+                    if ((dcmExists && labellingExists && iniExists)) {
+                        incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수",null);
+                        processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
+                        stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
+                    } else {
+                        stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
+                    }
+                }
+            }
+
+            // 파일 존재 여부에 따라 상태 업데이트
+
         }
+
     }
-
-    private void handleOtherDiseases(ChannelSftp channelSftp, String folderPath, String imageId,
-                                     List<Map<String, Object>> resultList, String institutionId, String diseaseClass,
-                                     AtomicBoolean stopSubfolderSearch) throws Exception {
-        boolean jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
-        boolean dcmExists = checkFileExistsInSFTPForImageId(channelSftp, folderPath, imageId);
-        boolean iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
-        boolean labellingExists = checkLabellingFileExistsInSFTPForImageId(channelSftp, folderPath + "/Labelling/Labelling", imageId);
-
-        if (jsonExists && dcmExists && labellingExists && iniExists) {
-            incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수", null);
-            processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
-            stopSubfolderSearch.set(true);
-        } else {
-            stopSubfolderSearch.set(true);
-        }
-    }
-
-
     private boolean checkFileExistsInSFTPForImageId(ChannelSftp channelSftp, String folderPath, String imageId) throws SftpException {
         // 지정된 경로(folderPath) 내에서만 파일과 폴더를 검색합니다.
         Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
@@ -406,8 +405,6 @@ public class AnalyzeBoardServiceImpl {
                 return false;
             }
         }
-
-        // 주어진 경로 내에서 imageId를 포함하는 폴더가 없으면 false 반환
         return false;
     }
 
