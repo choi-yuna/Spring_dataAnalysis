@@ -125,9 +125,6 @@ public class AnalyzeBoardServiceImpl {
             String fileName = entry.getFilename();
             if (fileName.endsWith(".xlsx")) {
                 synchronized (processedImageIds) {
-                    if (processedImageIds.contains(fileName)) {
-                        continue;
-                    }
                     processedImageIds.add(fileName);
                 }
 
