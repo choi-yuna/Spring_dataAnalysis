@@ -21,15 +21,15 @@ import java.util.stream.Collectors;
 @Service
 public class AnalyzeBoardServiceImpl {
     //원광대 서버 정보
-    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
-    private static final int SFTP_PORT = 2024;  // SFTP 포트
-    private static final String SFTP_USER = "master01";  // 사용자 계정
-    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
+//    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
+//    private static final int SFTP_PORT = 2024;  // SFTP 포트
+//    private static final String SFTP_USER = "master01";  // 사용자 계정
+//    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
     // SFTP 서버 정보
-//    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
-//    private static final int SFTP_PORT = 22;  // SFTP 포트
-//    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
-//    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
+    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
+    private static final int SFTP_PORT = 22;  // SFTP 포트
+    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
+    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
 
     private final DataGropedService dataGropedService;
     private final ExcelService excelService;
@@ -99,9 +99,18 @@ public class AnalyzeBoardServiceImpl {
     }
 
     private void processFolderRecursively(ChannelSftp channelSftp, String folderPath, List<Map<String, Object>> resultList, Set<String> processedImageIds, boolean refresh) throws Exception {
-        Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, folderPath);
+        Vector<ChannelSftp.LsEntry> files;
+        try {
+            // 디렉토리 파일 목록 가져오기
+            files = SFTPClient.listFiles(channelSftp, folderPath);
+        } catch (SftpException e) {
+            if (e.getMessage().contains("Permission denied")) {
+                log.warn("Permission denied for folder: {}. Skipping this folder.", folderPath);
+                return; // 권한 문제가 있는 폴더는 건너뛰기
+            }
+            throw e; // 다른 예외는 재발생
+        }
         log.info("Found {} files in folder: {}", files.size(), folderPath);
-        log.info("{}",refresh);
         // JSON 파일 존재 여부와 refresh 파라미터에 따라 처리
         if (checkFileExistsInSFTP(channelSftp, folderPath, "analysis_result.json", "") && !refresh) {
             log.info("JSON result file already exists for folder: {}", folderPath);
@@ -156,6 +165,9 @@ public class AnalyzeBoardServiceImpl {
             for (ChannelSftp.LsEntry entry : files) {
                 if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
                     String subFolderPath = folderPath + "/" + entry.getFilename();
+                    if (subFolderPath.contains("/Labelling/Labelling")) {
+                        continue;
+                    }
                     processFolderRecursively(channelSftp, subFolderPath, resultList, processedImageIds, refresh);
                 }
             }
