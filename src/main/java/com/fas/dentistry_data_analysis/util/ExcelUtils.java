@@ -1,6 +1,6 @@
 package com.fas.dentistry_data_analysis.util;
 
-import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.usermodel.DateUtil;
 
 public class ExcelUtils {
@@ -27,9 +27,24 @@ public class ExcelUtils {
             case BOOLEAN:
                 return String.valueOf(cell.getBooleanCellValue());
             case FORMULA:
-                return cell.getCellFormula();
+                FormulaEvaluator evaluator = cell.getSheet().getWorkbook().getCreationHelper().createFormulaEvaluator();
+                CellValue evaluatedValue = evaluator.evaluate(cell);
+                if (evaluatedValue != null) {
+                    switch (evaluatedValue.getCellType()) {
+                        case STRING:
+                            return evaluatedValue.getStringValue();
+                        case NUMERIC:
+                            return String.valueOf(evaluatedValue.getNumberValue());
+                        case BOOLEAN:
+                            return String.valueOf(evaluatedValue.getBooleanValue());
+                        default:
+                            return "";
+                    }
+                }
+                return "";
             default:
                 return "";
         }
     }
 }
+
