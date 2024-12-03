@@ -141,6 +141,27 @@ public class DataGropedService {
                 subRow.set(6, String.valueOf(secondCheckRate));
             }
         }
+        // 각 질환별로 데이터를 그룹화하는 마지막 단계에서 구축율 계산
+        for (Map<String, Object> diseaseData : groupedData.values()) {
+            List<Integer> totalData = (List<Integer>) diseaseData.get("totalData");
+            int totalGoalCount = totalData.get(0); // 목표건수
+            int totalFirstCheck = totalData.get(2); // 1차검수
+            int totalSecondCheck = totalData.get(4); // 2차검수
+
+            // 구축율 계산
+            int totalFirstCheckRate = (totalGoalCount > 0) ? (int) ((totalFirstCheck / (double) totalGoalCount) * 100) : 0;
+            int totalSecondCheckRate = (totalGoalCount > 0) ? (int) ((totalSecondCheck / (double) totalGoalCount) * 100) : 0;
+
+            // 구축율을 totalData에 추가
+            if (totalData.size() < 6) {
+                // 필요한 경우 totalData에 빈 공간 추가
+                totalData.add(0); // 1차 구축율
+                totalData.add(0); // 2차 구축율
+            }
+            totalData.set(3, totalFirstCheckRate); // 1차 구축율
+            totalData.set(5, totalSecondCheckRate); // 2차 구축율
+        }
+
 
         // 질환별로 기관을 정렬
         for (Map<String, Object> diseaseData : groupedData.values()) {
