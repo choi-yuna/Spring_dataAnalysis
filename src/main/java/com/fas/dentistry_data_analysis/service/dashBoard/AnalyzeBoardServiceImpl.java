@@ -21,15 +21,15 @@ import java.util.stream.Collectors;
 @Service
 public class AnalyzeBoardServiceImpl {
     //원광대 서버 정보
-//    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
-//    private static final int SFTP_PORT = 2024;  // SFTP 포트
-//    private static final String SFTP_USER = "master01";  // 사용자 계정
-//    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
+    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
+    private static final int SFTP_PORT = 2024;  // SFTP 포트
+    private static final String SFTP_USER = "master01";  // 사용자 계정
+    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
     // SFTP 서버 정보
-    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
-    private static final int SFTP_PORT = 22;  // SFTP 포트
-    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
-    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
+//    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
+//    private static final int SFTP_PORT = 22;  // SFTP 포트
+//    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
+//    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
 
     private final DataGropedService dataGropedService;
     private final ExcelService excelService;
@@ -246,6 +246,7 @@ public class AnalyzeBoardServiceImpl {
 
         // 상태 업데이트
         if (allKeysExist) {
+            log.info("{}",imageId);
             incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수",null);
         }
     }
@@ -311,9 +312,6 @@ public class AnalyzeBoardServiceImpl {
         for (Map<String, Object> row : filteredData) {
             String imageId = (String) row.get("IMAGE_ID");
 
-            if (processedImageIds.contains(imageId)) continue;
-            processedImageIds.add(imageId);
-
             // 엑셀 파일에서 IMAGE_ID가 JSON 파일에 포함된 경우 처리
             if (imageIdsFromExcel.contains(imageId)) {
                 boolean jsonExists = jsonFiles.stream().anyMatch(name -> name.contains(imageId));
@@ -351,6 +349,7 @@ public class AnalyzeBoardServiceImpl {
                 }
             }
             else if (folderPath.contains("두개안면")) {
+                log.info("{}",imageId);
                 jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
                 if (jsonExists) {
                     try (InputStream jsonInputStream = SFTPClient.readFile(channelSftp, folderPath+"/Labelling", imageId + ".json")) {
