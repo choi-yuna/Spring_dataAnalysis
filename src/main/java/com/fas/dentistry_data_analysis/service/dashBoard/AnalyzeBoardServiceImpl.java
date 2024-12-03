@@ -353,7 +353,7 @@ public class AnalyzeBoardServiceImpl {
             else if (folderPath.contains("두개안면")) {
                 jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
                 if (jsonExists) {
-                    try (InputStream jsonInputStream = SFTPClient.readFile(channelSftp, folderPath, imageId + ".json")) {
+                    try (InputStream jsonInputStream = SFTPClient.readFile(channelSftp, folderPath+"/Labelling", imageId + ".json")) {
                         // JSON 데이터 처리
                         processJsonInputStream(jsonInputStream, resultList, institutionId, diseaseClass, imageId);
                     } catch (Exception e) {
