@@ -3,6 +3,7 @@ package com.fas.dentistry_data_analysis.service.dashBoard;
 import com.fas.dentistry_data_analysis.util.ExcelUtils;
 import com.fas.dentistry_data_analysis.util.ValueMapping;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.ss.formula.eval.NotImplementedFunctionException;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
@@ -48,8 +49,13 @@ public class ExcelService {
     }
 
     private void processSheet(Sheet sheet, List<Map<String, Object>> filteredData) {
+        FormulaEvaluator evaluator = sheet.getWorkbook().getCreationHelper().createFormulaEvaluator(); // 수식 평가기 생성
+
+        log.debug("Processing sheet: {}", sheet.getSheetName());
+
         Row headerRow = sheet.getRow(3); // Header row is at row index 3
         if (headerRow == null) {
+            log.warn("Header row is missing in sheet: {}", sheet.getSheetName());
             return;
         }
 
@@ -59,6 +65,7 @@ public class ExcelService {
             if (cell != null) {
                 String headerName = cell.getStringCellValue().trim();
                 headerIndexMap.put(headerName, cellIndex);
+                log.debug("Header found: {} at column {}", headerName, cellIndex);
             }
         }
 
@@ -75,8 +82,10 @@ public class ExcelService {
                 // IMAGE_ID 추출
                 if (imageIdIndex != null) {
                     Cell imageIdCell = row.getCell(imageIdIndex);
-                    String imageIdValue = (imageIdCell != null) ? ExcelUtils.getCellValueAsString(imageIdCell) : "";
-                    if (imageIdValue == null || imageIdValue.isEmpty()) {continue;}
+                    String imageIdValue = (imageIdCell != null) ? getCellValueAsString(imageIdCell) : "";
+                    if (imageIdValue == null || imageIdValue.isEmpty()) {
+                        continue;
+                    }
                     rowData.put("IMAGE_ID", imageIdValue);
                 }
 
@@ -84,7 +93,9 @@ public class ExcelService {
                 if (diseaseClassIndex != null) {
                     Cell diseaseClassCell = row.getCell(diseaseClassIndex);
                     String diseaseClassValue = (diseaseClassCell != null) ? ExcelUtils.getCellValueAsString(diseaseClassCell) : "";
-                    if (diseaseClassValue == null || diseaseClassValue.isEmpty()) {continue;}
+                    if (diseaseClassValue == null || diseaseClassValue.isEmpty()) {
+                        continue;
+                    }
                     String mappedDiseaseClass = ValueMapping.getDiseaseClass(diseaseClassValue);
                     rowData.put("DISEASE_CLASS", mappedDiseaseClass);
                 }
@@ -93,7 +104,9 @@ public class ExcelService {
                 if (institutionIdIndex != null) {
                     Cell institutionIdCell = row.getCell(institutionIdIndex);
                     String institutionIdValue = (institutionIdCell != null) ? ExcelUtils.getCellValueAsString(institutionIdCell) : "";
-                    if (institutionIdValue == null || institutionIdValue.isEmpty()) {continue;}
+                    if (institutionIdValue == null || institutionIdValue.isEmpty()) {
+                        continue;
+                    }
                     String mappedInstitutionId = ValueMapping.getInstitutionDescription(institutionIdValue);
                     rowData.put("INSTITUTION_ID", mappedInstitutionId);
                 }
@@ -106,4 +119,42 @@ public class ExcelService {
             }
         }
     }
+
+    private String getCellValueAsString(Cell cell) {
+        try {
+            switch (cell.getCellType()) {
+                case STRING:
+                    return cell.getStringCellValue();
+                case NUMERIC:
+                    if (DateUtil.isCellDateFormatted(cell)) {
+                        return cell.getDateCellValue().toString(); // 날짜인 경우 처리
+                    }
+                    return String.valueOf(cell.getNumericCellValue());
+                case BOOLEAN:
+                    return String.valueOf(cell.getBooleanCellValue());
+                case FORMULA:
+                    // 수식을 무시하고 캐싱된 결과값 사용
+                    switch (cell.getCachedFormulaResultType()) {
+                        case STRING:
+                            return cell.getRichStringCellValue().getString();
+                        case NUMERIC:
+                            if (DateUtil.isCellDateFormatted(cell)) {
+                                return cell.getDateCellValue().toString();
+                            }
+                            return String.valueOf(cell.getNumericCellValue());
+                        case BOOLEAN:
+                            return String.valueOf(cell.getBooleanCellValue());
+                        default:
+                            return ""; // 캐싱된 결과값이 없을 경우 빈 문자열 반환
+                    }
+                default:
+                    return "";
+            }
+        } catch (Exception e) {
+            log.error("Error processing cell at {}: {}", cell.getAddress(), e.getMessage());
+            return "";
+        }
+    }
+
+
 }
