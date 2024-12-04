@@ -262,7 +262,6 @@ public class AnalyzeBoardServiceImpl {
 
         // 상태 업데이트
         if (allKeysExist) {
-            log.info("{}",imageId);
             incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수",null);
         }
     }
@@ -406,7 +405,6 @@ public class AnalyzeBoardServiceImpl {
                 }
             }
             else if (folderPath.contains("두개안면")) {
-                log.info("{}",imageId);
                 jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
                 if (jsonExists) {
                     try (InputStream jsonInputStream = SFTPClient.readFile(channelSftp, folderPath+"/Labelling", imageId + ".json")) {
