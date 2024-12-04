@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
 public class DataGropedService {
 
     private static final Map<String, Map<String, Integer>> institutionDiseaseGoals = new HashMap<>();
-    private static final List<String> diseaseOrder = Arrays.asList("치주질환", "골수염", "구강암", "두개안면");
+    private static final List<String> diseaseOrder = Arrays.asList("치주질환", "골수염","구강암", "두개안면");
 
     static {
         // Institution-wise disease goal data

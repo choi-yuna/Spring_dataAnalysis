@@ -16,6 +16,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 @Slf4j
 @Service
@@ -357,6 +358,54 @@ public class AnalyzeBoardServiceImpl {
             log.warn("Unable to determine DISEASE_CLASS or INSTITUTION_ID for file: {}", fileName);
             return;  // 필수 데이터가 없으면 중단
         }
+        if (folderPath.contains("대조군")) {
+            // 대조군 폴더의 하위 폴더 이름 가져오기 (폴더만 필터링)
+            Set<String> subFolderNames = folderFileCache.computeIfAbsent(folderPath, path -> {
+                try {
+                    log.info("Accessing path: {}", path);
+                    Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, path);
+
+                    return StreamSupport.stream(
+                                    Spliterators.spliteratorUnknownSize(files.elements().asIterator(), Spliterator.ORDERED),
+                                    false
+                            ).filter(entry -> entry.getAttrs() != null && entry.getAttrs().isDir()) // 디렉토리만 선택
+                            .filter(entry -> entry.getFilename() != null && !entry.getFilename().equals(".") && !entry.getFilename().equals(".."))
+                            .map(ChannelSftp.LsEntry::getFilename)
+                            .collect(Collectors.toSet()); // Set으로 변환
+                } catch (SftpException e) {
+                    if (e.getMessage().contains("Permission denied")) {
+                        log.error("Permission denied for path: {}", path);
+                    } else {
+                        log.error("Error accessing path: {}", path, e);
+                    }
+                    return Collections.emptySet(); // 빈 Set 반환
+                }
+            });
+
+            // 데이터 등록 건수 설정 (하위 폴더 수)
+            incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링등록건수", subFolderNames.size());
+
+            // 라벨링 PASS 건수 계산 (하위 폴더 이름을 IMAGE_ID와 비교)
+            for (String subFolderName : subFolderNames) {
+                boolean isMatched = imageIdsFromExcel.stream().anyMatch(imageId -> subFolderName.contains(imageId));
+
+                // "기관명(대조군)" 형식으로 변환
+                String labelKey = String.format("%s(대조군)", institutionId); // 예: "단국대학교(대조군)"
+
+                if (isMatched) {
+                    incrementStatus(resultList, labelKey, diseaseClass, subFolderName, "라벨링pass건수", null);
+                    log.info("라벨링 PASS: 하위 폴더 '{}'와 IMAGE_ID가 매칭되었습니다.", subFolderName);
+                } else {
+                    log.warn("라벨링 PASS 실패: 하위 폴더 '{}'와 IMAGE_ID가 매칭되지 않았습니다.", subFolderName);
+                }
+            }
+
+            stopSubfolderSearch.set(true); // 대조군은 하위 폴더 탐색 중지
+            return; // 대조군 처리 후 종료
+        }
+
+
+
 
 
         // JSON 파일 개수로 라벨링등록건수 설정
