@@ -62,7 +62,7 @@ public class DataGropedService {
             groupedData.putIfAbsent(diseaseClass, new HashMap<>());
             Map<String, Object> diseaseData = groupedData.get(diseaseClass);
             diseaseData.putIfAbsent("title", diseaseClass);
-            diseaseData.putIfAbsent("totalData", new ArrayList<>(Collections.nCopies(6, 0))); // 초기값 설정
+            diseaseData.putIfAbsent("totalData", new ArrayList<>(Collections.nCopies(7, 0))); // 초기값 설정
             diseaseData.putIfAbsent("subData", new ArrayList<>());
 
             // 모든 기관별로 목표 건수 초기화
@@ -78,11 +78,12 @@ public class DataGropedService {
                 List<String> subRow = new ArrayList<>();
                 subRow.add(institutionId); // 기관명
                 subRow.add(String.valueOf(institutionGoalCount)); // 목표 건수
-                subRow.add("0"); // 라벨링 건수
-                subRow.add("0"); // 1차 검수
-                subRow.add("0"); // 1차 구축율
-                subRow.add("0"); // 2차 검수
-                subRow.add("0"); // 2차 구축율
+                subRow.add("0");
+                subRow.add("0");
+                subRow.add("0");
+                subRow.add("0");
+                subRow.add("0");
+                subRow.add("0");
                 subData.add(subRow);
 
                 // 총 목표 건수 업데이트
@@ -105,18 +106,18 @@ public class DataGropedService {
             totalData.set(1, totalData.get(1) + labelingCount);
 
             int firstCheck = (item.get("라벨링pass건수") != null) ? (int) item.get("라벨링pass건수") : 0;
-            totalData.set(2, totalData.get(2) + firstCheck);
+            totalData.set(3, totalData.get(3) + firstCheck);
 
             int secondCheck = (item.get("2차검수") != null) ? (int) item.get("2차검수") : 0;
-            totalData.set(4, totalData.get(4) + secondCheck);
+            totalData.set(5, totalData.get(5) + secondCheck);
 
             // 기관 데이터 업데이트
             List<List<String>> subData = (List<List<String>>) diseaseData.get("subData");
             for (List<String> subRow : subData) {
                 if (subRow.get(0).equals(institutionId)) {
-                    subRow.set(2, String.valueOf(Integer.parseInt(subRow.get(2)) + labelingCount)); // 라벨링 건수
-                    subRow.set(3, String.valueOf(Integer.parseInt(subRow.get(3)) + firstCheck)); // 1차 검수
-                    subRow.set(5, String.valueOf(Integer.parseInt(subRow.get(5)) + secondCheck)); // 2차 검수
+                    subRow.set(2, String.valueOf(Integer.parseInt(subRow.get(2)) + labelingCount)); // 라벨링 등록건수
+                    subRow.set(4, String.valueOf(Integer.parseInt(subRow.get(4)) + firstCheck)); // 라벨링 pass건수
+                    subRow.set(6, String.valueOf(Integer.parseInt(subRow.get(6)) + secondCheck)); // 2차 검수
                     break;
                 }
             }
@@ -130,27 +131,34 @@ public class DataGropedService {
 
             for (List<String> subRow : subData) {
                 int institutionGoalCount = Integer.parseInt(subRow.get(1));
-                int firstCheck = Integer.parseInt(subRow.get(3));
-                int secondCheck = Integer.parseInt(subRow.get(5));
+                int LabellingCheck = Integer.parseInt(subRow.get(2));
+                int firstCheck = Integer.parseInt(subRow.get(4));
+                int secondCheck = Integer.parseInt(subRow.get(6));
 
+                int LabellingRate = (institutionGoalCount > 0) ? (int) ((LabellingCheck / (double) institutionGoalCount) * 100) : 0;
                 int firstCheckRate = (institutionGoalCount > 0) ? (int) ((firstCheck / (double) institutionGoalCount) * 100) : 0;
                 int secondCheckRate = (institutionGoalCount > 0) ? (int) ((secondCheck / (double) institutionGoalCount) * 100) : 0;
 
-                subRow.set(4, String.valueOf(firstCheckRate)); // 1차 구축율
-                subRow.set(6, String.valueOf(secondCheckRate)); // 2차 구축율
+                subRow.set(3, String.valueOf(LabellingRate)); // 1차 구축율
+                subRow.set(5, String.valueOf(firstCheckRate)); // 1차 구축율
+                subRow.set(7, String.valueOf(secondCheckRate)); // 2차 구축율
             }
 
             // 총합 데이터 구축율 계산
             List<Integer> totalData = (List<Integer>) diseaseData.get("totalData");
             int totalGoalCount = totalData.get(0);
-            int totalFirstCheck = totalData.get(2);
-            int totalSecondCheck = totalData.get(4);
+            int totalLabellingCheck = totalData.get(1);
+            int totalFirstCheck = totalData.get(3);
+            int totalSecondCheck = totalData.get(5);
 
+
+            int totalLabellingRate = (totalGoalCount > 0) ? (int) ((totalLabellingCheck / (double) totalGoalCount) * 100) : 0;
             int totalFirstCheckRate = (totalGoalCount > 0) ? (int) ((totalFirstCheck / (double) totalGoalCount) * 100) : 0;
             int totalSecondCheckRate = (totalGoalCount > 0) ? (int) ((totalSecondCheck / (double) totalGoalCount) * 100) : 0;
 
-            totalData.set(3, totalFirstCheckRate); // 1차 구축율
-            totalData.set(5, totalSecondCheckRate); // 2차 구축율
+            totalData.set(2, totalLabellingRate); // 1차 구축율
+            totalData.set(4, totalFirstCheckRate); // 1차 구축율
+            totalData.set(6, totalSecondCheckRate); // 2차 구축율
         }
 
         // 질환별로 기관을 정렬
@@ -180,7 +188,7 @@ public class DataGropedService {
             groupedData.putIfAbsent(institutionId, new HashMap<>());
             Map<String, Object> institutionData = groupedData.get(institutionId);
             institutionData.putIfAbsent("title", institutionId);
-            institutionData.putIfAbsent("totalData", new ArrayList<>(Collections.nCopies(6, 0))); // 초기값 설정
+            institutionData.putIfAbsent("totalData", new ArrayList<>(Collections.nCopies(7, 0))); // 초기값 설정
             institutionData.putIfAbsent("subData", new ArrayList<>());
 
             List<List<String>> subData = (List<List<String>>) institutionData.get("subData");
@@ -198,10 +206,11 @@ public class DataGropedService {
                 subRow.add(diseaseClass); // 질환명
                 subRow.add(String.valueOf(goalCount)); // 목표 건수
                 subRow.add("0"); // 라벨링 건수
-                subRow.add("0"); // 1차 검수
-                subRow.add("0"); // 1차 구축율
-                subRow.add("0"); // 2차 검수
-                subRow.add("0"); // 2차 구축율
+                subRow.add("0");
+                subRow.add("0");
+                subRow.add("0");
+                subRow.add("0");
+                subRow.add("0");
                 subData.add(subRow);
 
                 // 총 목표 건수 업데이트
@@ -224,18 +233,18 @@ public class DataGropedService {
             totalData.set(1, totalData.get(1) + labelingCount);
 
             int firstCheck = (item.get("라벨링pass건수") != null) ? (int) item.get("라벨링pass건수") : 0;
-            totalData.set(2, totalData.get(2) + firstCheck);
+            totalData.set(3, totalData.get(3) + firstCheck);
 
             int secondCheck = (item.get("2차검수") != null) ? (int) item.get("2차검수") : 0;
-            totalData.set(4, totalData.get(4) + secondCheck);
+            totalData.set(5, totalData.get(5) + secondCheck);
 
             // subData 업데이트
             List<List<String>> subData = (List<List<String>>) institutionData.get("subData");
             for (List<String> subRow : subData) {
                 if (subRow.get(0).equals(diseaseClass)) {
                     subRow.set(2, String.valueOf(Integer.parseInt(subRow.get(2)) + labelingCount)); // 라벨링 건수
-                    subRow.set(3, String.valueOf(Integer.parseInt(subRow.get(3)) + firstCheck)); // 1차 검수
-                    subRow.set(5, String.valueOf(Integer.parseInt(subRow.get(5)) + secondCheck)); // 2차 검수
+                    subRow.set(4, String.valueOf(Integer.parseInt(subRow.get(4)) + firstCheck)); // pass 건수
+                    subRow.set(6, String.valueOf(Integer.parseInt(subRow.get(6)) + secondCheck)); // 2차 검수
                     break;
                 }
             }
@@ -250,28 +259,35 @@ public class DataGropedService {
 
             for (List<String> subRow : subData) {
                 int goalCount = Integer.parseInt(subRow.get(1));
-                int firstCheck = Integer.parseInt(subRow.get(3));
-                int secondCheck = Integer.parseInt(subRow.get(5));
+                int labellingCheck = Integer.parseInt(subRow.get(2));
+                int firstCheck = Integer.parseInt(subRow.get(4));
+                int secondCheck = Integer.parseInt(subRow.get(6));
 
                 // 구축율 계산
+                int labellingCheckRate = (goalCount > 0) ? (int) ((labellingCheck / (double) goalCount) * 100) : 0;
                 int firstCheckRate = (goalCount > 0) ? (int) ((firstCheck / (double) goalCount) * 100) : 0;
                 int secondCheckRate = (goalCount > 0) ? (int) ((secondCheck / (double) goalCount) * 100) : 0;
 
-                subRow.set(4, String.valueOf(firstCheckRate)); // 1차 구축율
-                subRow.set(6, String.valueOf(secondCheckRate)); // 2차 구축율
+                subRow.set(3, String.valueOf(labellingCheckRate)); // 라벨링 구축율
+                subRow.set(5, String.valueOf(firstCheckRate)); // 1차 구축율
+                subRow.set(7, String.valueOf(secondCheckRate)); // 2차 구축율
             }
 
             // 총합 데이터 구축율 계산
             List<Integer> totalData = (List<Integer>) institutionData.get("totalData");
             int totalGoalCount = totalData.get(0);
-            int totalFirstCheck = totalData.get(2);
-            int totalSecondCheck = totalData.get(4);
+            int totalLabellingCheck = totalData.get(1);
+            int totalFirstCheck = totalData.get(3);
+            int totalSecondCheck = totalData.get(5);
+
 
             int totalFirstCheckRate = (totalGoalCount > 0) ? (int) ((totalFirstCheck / (double) totalGoalCount) * 100) : 0;
+            int totalLabellingCheckRate = (totalGoalCount > 0) ? (int) ((totalLabellingCheck / (double) totalGoalCount) * 100) : 0;
             int totalSecondCheckRate = (totalGoalCount > 0) ? (int) ((totalSecondCheck / (double) totalGoalCount) * 100) : 0;
 
-            totalData.set(3, totalFirstCheckRate); // 1차 구축율
-            totalData.set(5, totalSecondCheckRate); // 2차 구축율
+            totalData.set(2, totalLabellingCheckRate); // 라벨링 구축율
+            totalData.set(4, totalFirstCheckRate); // 1차 구축율
+            totalData.set(6, totalSecondCheckRate); // 2차 구축율
         }
 
         // 기관을 가나다 순으로 정렬
@@ -289,7 +305,7 @@ public class DataGropedService {
         Map<String, Object> institutionData = new HashMap<>();
         institutionData.put("title", title);
 
-        List<Integer> totalData = new ArrayList<>(Collections.nCopies(6, 0)); // 초기화된 totalData
+        List<Integer> totalData = new ArrayList<>(Collections.nCopies(7, 0)); // 초기화된 totalData
         Map<String, Map<String, Object>> groupedDataMap = new HashMap<>(); // 그룹화된 질환 데이터
 
         // 모든 질환 초기화
@@ -326,11 +342,11 @@ public class DataGropedService {
 
                 int firstCheck = (item.get("라벨링pass건수") != null) ? (int) item.get("라벨링pass건수") : 0;
                 groupData.put("라벨링pass건수", (int) groupData.get("라벨링pass건수") + firstCheck);
-                totalData.set(2, totalData.get(2) + firstCheck);
+                totalData.set(3, totalData.get(3) + firstCheck);
 
                 int secondCheck = (item.get("2차검수") != null) ? (int) item.get("2차검수") : 0;
                 groupData.put("2차검수", (int) groupData.get("2차검수") + secondCheck);
-                totalData.set(4, totalData.get(4) + secondCheck);
+                totalData.set(5, totalData.get(5) + secondCheck);
             }
         }
 
@@ -340,24 +356,28 @@ public class DataGropedService {
             String groupKey = entry.getKey();
             Map<String, Object> groupData = entry.getValue();
 
-            List<String> subRow = new ArrayList<>(Collections.nCopies(7, ""));
+            List<String> subRow = new ArrayList<>(Collections.nCopies(8, ""));
             subRow.set(0, groupKey); // 질환명
             subRow.set(1, groupData.get("목표건수").toString());
             subRow.set(2, groupData.get("라벨링등록건수").toString());
-            subRow.set(3, groupData.get("라벨링pass건수").toString());
+            subRow.set(4, groupData.get("라벨링pass건수").toString());
+            subRow.set(6, groupData.get("2차검수").toString());
 
             int totalGroupGoalCount = (int) groupData.get("목표건수");
+            int labellingCheck = (int) groupData.get("라벨링등록건수");
             int firstCheck = (int) groupData.get("라벨링pass건수");
             int secondCheck = (int) groupData.get("2차검수");
 
+            //라벨링 구축율 계산
+            int labellingBuildRate = (totalGroupGoalCount > 0) ? (labellingCheck * 100 / totalGroupGoalCount) : 0;
+            subRow.set(3, String.valueOf(labellingBuildRate));
             // 1차 구축율 계산
             int firstBuildRate = (totalGroupGoalCount > 0) ? (firstCheck * 100 / totalGroupGoalCount) : 0;
-            subRow.set(4, String.valueOf(firstBuildRate));
+            subRow.set(5, String.valueOf(firstBuildRate));
 
             // 2차 구축율 계산
             int buildRateForGroup = (totalGroupGoalCount > 0) ? (secondCheck * 100 / totalGroupGoalCount) : 0;
-            subRow.set(5, groupData.get("2차검수").toString());
-            subRow.set(6, String.valueOf(buildRateForGroup));
+            subRow.set(7, String.valueOf(buildRateForGroup));
 
             subData.add(subRow);
         }
@@ -372,8 +392,9 @@ public class DataGropedService {
         // totalData에서 전체 구축율 계산
         int totalGoalCount = totalData.get(0);
         if (totalGoalCount > 0) {
-            totalData.set(3, (totalData.get(2) * 100) / totalGoalCount); // 1차 구축율
-            totalData.set(5, (totalData.get(4) * 100) / totalGoalCount); // 2차 구축율
+            totalData.set(2, (totalData.get(1) * 100) / totalGoalCount); // 라벨링 구축율
+            totalData.set(4, (totalData.get(3) * 100) / totalGoalCount); // 1차 구축율
+            totalData.set(6, (totalData.get(5) * 100) / totalGoalCount); // 2차 구축율
         }
 
         // 결과 데이터에 추가
@@ -391,7 +412,7 @@ public class DataGropedService {
         Map<String, Object> diseaseData = new HashMap<>();
         diseaseData.put("title", title);
 
-        List<Integer> totalData = new ArrayList<>(Collections.nCopies(6, 0)); // 전체 데이터를 초기화
+        List<Integer> totalData = new ArrayList<>(Collections.nCopies(7, 0)); // 전체 데이터를 초기화
         Map<String, Map<String, Object>> groupedDataMap = new HashMap<>(); // 기관별 데이터 저장
 
         // 기관별로 목표건수 초기화
@@ -429,11 +450,11 @@ public class DataGropedService {
 
             int firstCheck = (item.get("라벨링pass건수") != null) ? (int) item.get("라벨링pass건수") : 0;
             institutionDataMap.put("라벨링pass건수", (int) institutionDataMap.get("라벨링pass건수") + firstCheck);
-            totalData.set(2, totalData.get(2) + firstCheck);
+            totalData.set(3, totalData.get(3) + firstCheck);
 
             int secondCheck = (item.get("2차검수") != null) ? (int) item.get("2차검수") : 0;
             institutionDataMap.put("2차검수", (int) institutionDataMap.get("2차검수") + secondCheck);
-            totalData.set(4, totalData.get(4) + secondCheck);
+            totalData.set(5, totalData.get(5) + secondCheck);
         }
 
         // subData 생성
@@ -442,24 +463,29 @@ public class DataGropedService {
             String institutionId = entry.getKey();
             Map<String, Object> institutionDataMap = entry.getValue();
 
-            List<String> subRow = new ArrayList<>(Collections.nCopies(7, ""));
+            List<String> subRow = new ArrayList<>(Collections.nCopies(8, ""));
             subRow.set(0, institutionId); // 기관명
             subRow.set(1, institutionDataMap.get("목표건수").toString());
             subRow.set(2, institutionDataMap.get("라벨링등록건수").toString());
-            subRow.set(3, institutionDataMap.get("라벨링pass건수").toString());
+            subRow.set(4, institutionDataMap.get("라벨링pass건수").toString());
+            subRow.set(6, institutionDataMap.get("2차검수").toString());
 
             int totalGoalForInstitution = (int) institutionDataMap.get("목표건수");
+            int labellingCheck = (int) institutionDataMap.get("라벨링등록건수");
             int firstCheck = (int) institutionDataMap.get("라벨링pass건수");
             int secondCheck = (int) institutionDataMap.get("2차검수");
 
+            //라벨링 구축율 계산
+            int labellingBuildRate = (totalGoalForInstitution > 0) ? (labellingCheck * 100 / totalGoalForInstitution) : 0;
+            subRow.set(3, String.valueOf(labellingBuildRate));
+
             // 1차 구축율 계산
             int firstBuildRate = (totalGoalForInstitution > 0) ? (firstCheck * 100 / totalGoalForInstitution) : 0;
-            subRow.set(4, String.valueOf(firstBuildRate));
+            subRow.set(5, String.valueOf(firstBuildRate));
 
             // 2차 구축율 계산
             int secondBuildRate = (totalGoalForInstitution > 0) ? (secondCheck * 100 / totalGoalForInstitution) : 0;
-            subRow.set(5, institutionDataMap.get("2차검수").toString());
-            subRow.set(6, String.valueOf(secondBuildRate));
+            subRow.set(7, String.valueOf(secondBuildRate));
 
             subData.add(subRow);
         }
@@ -470,8 +496,9 @@ public class DataGropedService {
         // totalData에서 전체 구축율 계산
         int totalGoalCount = totalData.get(0);
         if (totalGoalCount > 0) {
-            totalData.set(3, (totalData.get(2) * 100) / totalGoalCount); // 1차 구축율
-            totalData.set(5, (totalData.get(4) * 100) / totalGoalCount); // 2차 구축율
+            totalData.set(2, (totalData.get(1) * 100) / totalGoalCount); // 라벨링 구축율
+            totalData.set(4, (totalData.get(3) * 100) / totalGoalCount); // 1차 구축율
+            totalData.set(6, (totalData.get(5) * 100) / totalGoalCount); // 2차 구축율
         }
 
         // 결과 데이터 저장
