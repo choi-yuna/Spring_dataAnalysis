@@ -381,16 +381,14 @@ public class AnalyzeBoardServiceImpl {
                     return Collections.emptySet(); // 빈 Set 반환
                 }
             });
-
+            String labelKey = String.format("%s(대조군)", institutionId); // 예: "단국대학교(대조군)"
             // 데이터 등록 건수 설정 (하위 폴더 수)
-            incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링등록건수", subFolderNames.size());
+            incrementStatus(resultList, labelKey, diseaseClass, null, "라벨링등록건수", subFolderNames.size());
 
             // 라벨링 PASS 건수 계산 (하위 폴더 이름을 IMAGE_ID와 비교)
             for (String subFolderName : subFolderNames) {
                 boolean isMatched = imageIdsFromExcel.stream().anyMatch(imageId -> subFolderName.contains(imageId));
 
-                // "기관명(대조군)" 형식으로 변환
-                String labelKey = String.format("%s(대조군)", institutionId); // 예: "단국대학교(대조군)"
 
                 if (isMatched) {
                     incrementStatus(resultList, labelKey, diseaseClass, subFolderName, "라벨링pass건수", null);
