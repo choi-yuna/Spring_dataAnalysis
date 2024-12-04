@@ -28,6 +28,10 @@ public class SFTPClient {
 
         return (ChannelSftp) channel;
     }
+    public static void deleteFile(ChannelSftp channelSftp, String filePath) throws SftpException {
+        channelSftp.rm(filePath);
+    }
+
 
     // SFTP 서버에서 특정 폴더의 파일 목록을 가져오는 메소드
     public static Vector<ChannelSftp.LsEntry> listFiles(ChannelSftp channelSftp, String folderPath) throws SftpException {

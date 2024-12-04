@@ -100,6 +100,7 @@ public class AnalyzeBoardServiceImpl {
 
     private void processFolderRecursively(ChannelSftp channelSftp, String folderPath, List<Map<String, Object>> resultList, Set<String> processedImageIds, boolean refresh) throws Exception {
         Vector<ChannelSftp.LsEntry> files;
+
         try {
             // 디렉토리 파일 목록 가져오기
             files = SFTPClient.listFiles(channelSftp, folderPath);
@@ -110,15 +111,29 @@ public class AnalyzeBoardServiceImpl {
             }
             throw e; // 다른 예외는 재발생
         }
+
         log.info("Found {} files in folder: {}", files.size(), folderPath);
+
         // JSON 파일 존재 여부와 refresh 파라미터에 따라 처리
-        if (checkFileExistsInSFTP(channelSftp, folderPath, "analysis_result.json", "") && !refresh) {
-            log.info("JSON result file already exists for folder: {}", folderPath);
-
-            List<Map<String, Object>> existingResults = loadResultsFromJsonSftp(folderPath, channelSftp);
-
-            resultList.addAll(existingResults);
-            return; // 추가 처리 건너뜁니다.
+        String jsonFilePath = folderPath + "/analysis_result.json";
+        if (checkFileExistsInSFTP(channelSftp, folderPath, "analysis_result.json", "")) {
+            if (refresh) {
+                try {
+                    SFTPClient.deleteFile(channelSftp, jsonFilePath);
+                    log.info("Existing analysis_result.json deleted for folder: {}", folderPath);
+                } catch (SftpException e) {
+                    if (e.getMessage().contains("No such file")) {
+                        log.warn("No existing analysis_result.json to delete for folder: {}", folderPath);
+                    } else {
+                        throw e; // 다른 예외는 재발생
+                    }
+                }
+            } else {
+                log.info("JSON result file already exists for folder: {}", folderPath);
+                List<Map<String, Object>> existingResults = loadResultsFromJsonSftp(folderPath, channelSftp);
+                resultList.addAll(existingResults);
+                return; // 추가 처리 건너뜁니다.
+            }
         }
 
         // 결과를 새로 분석하는 로직
@@ -175,6 +190,7 @@ public class AnalyzeBoardServiceImpl {
 
         executorService.shutdown();
     }
+
 
     private List<Map<String, Object>> loadResultsFromJsonSftp(String folderPath, ChannelSftp channelSftp) throws IOException, SftpException {
         // JSON 파일 경로
@@ -284,24 +300,65 @@ public class AnalyzeBoardServiceImpl {
         String diseaseClass = null;
         String institutionId = null;
 
-        // JSON 파일에서 질환과 기관 정보를 먼저 추출
-        for (String jsonFileName : jsonFiles) {
-            Map<String, String> jsonData = extractInstitutionAndDiseaseFromJson(channelSftp, jsonPath, jsonFileName);
-            if (jsonData.get("DISEASE_CLASS") != null) {
-                String JsonDiseaseClass = jsonData.get("DISEASE_CLASS");
-                diseaseClass = ValueMapping.getDiseaseClass(JsonDiseaseClass);
-            }
-            if (jsonData.get("INSTITUTION_ID") != null) {
-                String jsonInstitutionId = jsonData.get("INSTITUTION_ID");
-                institutionId = ValueMapping.getInstitutionDescription(jsonInstitutionId);
-            }
-            if (diseaseClass != null && institutionId != null) break;  // 값이 모두 추출되면 종료
+//        // JSON 파일에서 질환과 기관 정보를 먼저 추출
+//        for (String jsonFileName : jsonFiles) {
+//            Map<String, String> jsonData = extractInstitutionAndDiseaseFromJson(channelSftp, jsonPath, jsonFileName);
+//            if (jsonData.get("DISEASE_CLASS") != null) {
+//                String JsonDiseaseClass = jsonData.get("DISEASE_CLASS");
+//                diseaseClass = ValueMapping.getDiseaseClass(JsonDiseaseClass);
+//            }
+//            if (jsonData.get("INSTITUTION_ID") != null) {
+//                String jsonInstitutionId = jsonData.get("INSTITUTION_ID");
+//                institutionId = ValueMapping.getInstitutionDescription(jsonInstitutionId);
+//            }
+//            if (diseaseClass != null && institutionId != null) break;  // 값이 모두 추출되면 종료
+//        }
+//
+//        if (diseaseClass == null || institutionId == null) {
+//            log.warn("Unable to determine DISEASE_CLASS or INSTITUTION_ID for file: {}", fileName);
+//            return;  // 필수 데이터가 없으면 중단
+//        }
+// 폴더명을 분석하여 DISEASE_CLASS와 INSTITUTION_ID 추출
+        if (folderPath.contains("치주질환")) {
+            diseaseClass = "치주질환";
+        } else if (folderPath.contains("두개안면")) {
+            diseaseClass = "두개안면";
+        } else if (folderPath.contains("구강암")) {
+            diseaseClass = "구강암";
+        }
+        else if (folderPath.contains("골수염")) {
+            diseaseClass = "골수염";
+        }
+        else if (folderPath.contains("대조군")) {
+            diseaseClass = "대조군";
+        }else {
+            log.warn("Unknown disease class in folder path: {}", folderPath);
         }
 
+        if (folderPath.contains("고려대")) {
+            institutionId = "고려대학교";
+        } else if (folderPath.contains("보라매")) {
+            institutionId = "보라매병원";
+        } else if (folderPath.contains("단국대")) {
+            institutionId = "단국대학교";
+        } else if (folderPath.contains("국립암센터")) {
+            institutionId = "국립암센터";
+        }else if (folderPath.contains("서울대")) {
+            institutionId = "서울대학교";
+        }else if (folderPath.contains("원광대")) {
+            institutionId = "원광대학교";}
+        else if (folderPath.contains("조선대")) {
+                institutionId = "조선대학교";
+        }else {
+            log.warn("Unknown institution in folder path: {}", folderPath);
+        }
+
+// DISEASE_CLASS와 INSTITUTION_ID가 모두 추출되지 않았을 경우 처리
         if (diseaseClass == null || institutionId == null) {
             log.warn("Unable to determine DISEASE_CLASS or INSTITUTION_ID for file: {}", fileName);
             return;  // 필수 데이터가 없으면 중단
         }
+
 
         // JSON 파일 개수로 라벨링등록건수 설정
         if (!jsonFiles.isEmpty()) {
