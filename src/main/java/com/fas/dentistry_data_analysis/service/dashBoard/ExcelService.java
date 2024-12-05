@@ -76,8 +76,10 @@ public class ExcelService {
                 Map<String, Object> rowData = new LinkedHashMap<>();
 
                 Integer imageIdIndex = headerIndexMap.get("IMAGE_ID");
-                Integer diseaseClassIndex = headerIndexMap.get("DISEASE_CLASS");
-                Integer institutionIdIndex = headerIndexMap.get("INSTITUTION_ID");
+                //질환 인덱스
+                //Integer diseaseClassIndex = headerIndexMap.get("DISEASE_CLASS");
+                //기관 인덱스
+                //Integer institutionIdIndex = headerIndexMap.get("INSTITUTION_ID");
 
                 // IMAGE_ID 추출
                 if (imageIdIndex != null) {
@@ -88,29 +90,6 @@ public class ExcelService {
                     }
                     rowData.put("IMAGE_ID", imageIdValue);
                 }
-
-                // DISEASE_CLASS 추출
-                if (diseaseClassIndex != null) {
-                    Cell diseaseClassCell = row.getCell(diseaseClassIndex);
-                    String diseaseClassValue = (diseaseClassCell != null) ? ExcelUtils.getCellValueAsString(diseaseClassCell) : "";
-                    if (diseaseClassValue == null || diseaseClassValue.isEmpty()) {
-                        continue;
-                    }
-                    String mappedDiseaseClass = ValueMapping.getDiseaseClass(diseaseClassValue);
-                    rowData.put("DISEASE_CLASS", mappedDiseaseClass);
-                }
-
-                // INSTITUTION_ID 추출
-                if (institutionIdIndex != null) {
-                    Cell institutionIdCell = row.getCell(institutionIdIndex);
-                    String institutionIdValue = (institutionIdCell != null) ? ExcelUtils.getCellValueAsString(institutionIdCell) : "";
-                    if (institutionIdValue == null || institutionIdValue.isEmpty()) {
-                        continue;
-                    }
-                    String mappedInstitutionId = ValueMapping.getInstitutionDescription(institutionIdValue);
-                    rowData.put("INSTITUTION_ID", mappedInstitutionId);
-                }
-
                 if (!rowData.isEmpty()) {
                     synchronized (filteredData) {  // 여러 스레드에서 동시에 추가되지 않도록 동기화
                         filteredData.add(rowData);

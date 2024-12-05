@@ -93,9 +93,6 @@ public class AnalyzeBoardServiceImpl {
             }
         }
 
-        log.info("Total number of unique image IDs: {}", uniqueImageIds.size());
-        log.info("Number of null image IDs: {}", nullCount);
-
         return response;
     }
 
@@ -112,8 +109,6 @@ public class AnalyzeBoardServiceImpl {
             }
             throw e; // 다른 예외는 재발생
         }
-
-        log.info("Found {} files in folder: {}", files.size(), folderPath);
 
         // JSON 파일 존재 여부와 refresh 파라미터에 따라 처리
         String jsonFilePath = folderPath + "/analysis_result.json";
@@ -213,6 +208,7 @@ public class AnalyzeBoardServiceImpl {
             Map<String, Object> resultData = new HashMap<>();
             resultData.put("DISEASE_CLASS", result.getOrDefault("DISEASE_CLASS", "N/A"));
             resultData.put("INSTITUTION_ID", result.getOrDefault("INSTITUTION_ID", "N/A"));
+            resultData.put("GROUP_TYPE", result.getOrDefault("GROUP_TYPE", "N/A"));
             resultData.put("라벨링등록건수", result.getOrDefault("라벨링등록건수", 0));
             resultData.put("라벨링pass건수", result.getOrDefault("라벨링pass건수", 0));
             resultData.put("1차검수", result.getOrDefault("1차검수", 0));
@@ -263,7 +259,7 @@ public class AnalyzeBoardServiceImpl {
 
         // 상태 업데이트
         if (allKeysExist) {
-            incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수",null);
+            incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);
         }
     }
 
@@ -358,20 +354,49 @@ public class AnalyzeBoardServiceImpl {
             log.warn("Unable to determine DISEASE_CLASS or INSTITUTION_ID for file: {}", fileName);
             return;  // 필수 데이터가 없으면 중단
         }
+        if (diseaseClass == null || institutionId == null) {
+            log.warn("Unable to determine DISEASE_CLASS or INSTITUTION_ID for file: {}", fileName);
+            return;  // 필수 데이터가 없으면 중단
+        }
+
         if (folderPath.contains("대조군")) {
-            // 대조군 폴더의 하위 폴더 이름 가져오기 (폴더만 필터링)
+            folderFileCache.clear();
             Set<String> subFolderNames = folderFileCache.computeIfAbsent(folderPath, path -> {
                 try {
-                    log.info("Accessing path: {}", path);
                     Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, path);
 
-                    return StreamSupport.stream(
-                                    Spliterators.spliteratorUnknownSize(files.elements().asIterator(), Spliterator.ORDERED),
-                                    false
-                            ).filter(entry -> entry.getAttrs() != null && entry.getAttrs().isDir()) // 디렉토리만 선택
-                            .filter(entry -> entry.getFilename() != null && !entry.getFilename().equals(".") && !entry.getFilename().equals(".."))
+                    // 반환된 데이터 상세 디버깅
+                    files.stream().forEach(entry -> {
+                    });
+
+                    return files.stream()
+                            .filter(entry -> {
+                                if (entry.getAttrs() == null) {
+                                    return false; // 속성이 null이면 제외
+                                }
+
+                                // 디렉토리인지 확인
+                                boolean isDirectory = entry.getAttrs().isDir();
+                                if (!isDirectory) {
+                                    return false;
+                                }
+
+                                String filename = entry.getFilename();
+                                // ".", ".." 같은 잘못된 폴더 제외
+                                if (filename == null || filename.equals(".") || filename.equals("..")) {
+                                    return false;
+                                }
+
+                                // 추가 필터: 이름이 특정 패턴을 따르지 않는 경우 제외 (예: ".json", ".xlsx" 등)
+                                if (filename.startsWith(".") || filename.endsWith(".json") || filename.endsWith(".xlsx")) {
+                                    return false;
+                                }
+
+                                return true; // 유효한 디렉토리
+                            })
                             .map(ChannelSftp.LsEntry::getFilename)
-                            .collect(Collectors.toSet()); // Set으로 변환
+                            .collect(Collectors.toSet());
+
                 } catch (SftpException e) {
                     if (e.getMessage().contains("Permission denied")) {
                         log.error("Permission denied for path: {}", path);
@@ -381,29 +406,28 @@ public class AnalyzeBoardServiceImpl {
                     return Collections.emptySet(); // 빈 Set 반환
                 }
             });
-            String labelKey = String.format("%s(대조군)", institutionId); // 예: "단국대학교(대조군)"
-            // 데이터 등록 건수 설정 (하위 폴더 수)
-            incrementStatus(resultList, labelKey, diseaseClass, null, "라벨링등록건수", subFolderNames.size());
 
-            // 라벨링 PASS 건수 계산 (하위 폴더 이름을 IMAGE_ID와 비교)
+// 최종 결과 디버깅
+
+
+//            String diseaseKey = String.format("%s(대조군)", diseaseClass); // 예: "단국대학교(대조군)"
+
+            // 데이터 등록 건수 설정 (하위 폴더 수)
+            incrementStatus(resultList, institutionId, diseaseClass, "대조군", "라벨링등록건수", subFolderNames.size());
+
+        // 라벨링 PASS 건수 계산 (하위 폴더 이름을 IMAGE_ID와 비교)
             for (String subFolderName : subFolderNames) {
                 boolean isMatched = imageIdsFromExcel.stream().anyMatch(imageId -> subFolderName.contains(imageId));
 
 
                 if (isMatched) {
-                    incrementStatus(resultList, labelKey, diseaseClass, subFolderName, "라벨링pass건수", null);
-                    log.info("라벨링 PASS: 하위 폴더 '{}'와 IMAGE_ID가 매칭되었습니다.", subFolderName);
-                } else {
-                    log.warn("라벨링 PASS 실패: 하위 폴더 '{}'와 IMAGE_ID가 매칭되지 않았습니다.", subFolderName);
+                    incrementStatus(resultList, institutionId, diseaseClass, "대조군", "라벨링pass건수", null);
                 }
             }
 
             stopSubfolderSearch.set(true); // 대조군은 하위 폴더 탐색 중지
             return; // 대조군 처리 후 종료
         }
-
-
-
 
 
         // JSON 파일 개수로 라벨링등록건수 설정
@@ -418,7 +442,9 @@ public class AnalyzeBoardServiceImpl {
             // 엑셀 파일에서 IMAGE_ID가 JSON 파일에 포함된 경우 처리
             if (imageIdsFromExcel.contains(imageId)) {
                 boolean jsonExists = jsonFiles.stream().anyMatch(name -> name.contains(imageId));
-                if (!jsonExists) continue;
+                if (!jsonExists) {
+                    continue;
+                }
             }
 
             // 파일 존재 여부를 확인하는 부분 (치주질환 폴더 확인)
@@ -442,7 +468,7 @@ public class AnalyzeBoardServiceImpl {
                 alveExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/alve");
                 if(jsonExists) {
                     if ((dcmExists && iniExists && toothExists && tlaExists && cejExists && alveExists)) {
-                        incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수",null);
+                        incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);
                         processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
                         stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
                     } else {
@@ -470,7 +496,7 @@ public class AnalyzeBoardServiceImpl {
                 labellingExists = checkLabellingFileExistsInSFTPForImageId(channelSftp,folderPath+"/Labelling/Labelling", imageId);
                 if (jsonExists) {
                     if ((dcmExists && labellingExists && iniExists)) {
-                        incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수",null);
+                        incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);
                         processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
                         stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
                     } else {
@@ -586,8 +612,9 @@ public class AnalyzeBoardServiceImpl {
 //            if (firstCheckStatus) {
 //                incrementStatus(resultList, institutionId, diseaseClass, imageId, "1차검수");
 //            }
+
             if (secondCheckStatus) {
-                incrementStatus(resultList, institutionId, diseaseClass, imageId, "2차검수",null);
+                incrementStatus(resultList, institutionId, diseaseClass, null, "2차검수",0);  // 2 차검수 증가값 0으로 고정
             }
         } catch (Exception e) {
             log.error("Error while processing JSON file for Image ID: {}", imageId, e);
@@ -618,7 +645,7 @@ public class AnalyzeBoardServiceImpl {
 
     // 중복된 IMAGE_ID를 처리하는 방식 개선
     private void incrementStatus(List<Map<String, Object>> resultList, String institutionId, String diseaseClass,
-                                 String imageId, String status, Integer incrementValue) {
+                                 String groupData, String status, Integer incrementValue) {
         // INSTITUTION_ID와 DISEASE_CLASS를 기준으로 항목을 찾습니다.
         Optional<Map<String, Object>> existing = resultList.stream()
                 .filter(item -> institutionId.equals(item.get("INSTITUTION_ID"))
@@ -630,6 +657,7 @@ public class AnalyzeBoardServiceImpl {
             Map<String, Object> newEntry = new HashMap<>();
             newEntry.put("INSTITUTION_ID", institutionId);
             newEntry.put("DISEASE_CLASS", diseaseClass);  // DISEASE_CLASS 추가
+            newEntry.put("GROUP_TYPE", groupData);  // DISEASE_CLASS 추가
             newEntry.put("목표건수", 0);  // 목표건수는 초기화
             newEntry.put("라벨링등록건수", 0);
             newEntry.put("라벨링pass건수", 0);
