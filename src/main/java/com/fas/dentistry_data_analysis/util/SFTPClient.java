@@ -3,6 +3,8 @@ package com.fas.dentistry_data_analysis.util;
 import com.jcraft.jsch.*;
 
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Vector;
 
 public class SFTPClient {
@@ -34,13 +36,18 @@ public class SFTPClient {
 
 
     // SFTP 서버에서 특정 폴더의 파일 목록을 가져오는 메소드
-    public static Vector<ChannelSftp.LsEntry> listFiles(ChannelSftp channelSftp, String folderPath) throws SftpException {
-        // 폴더 경로 확인 후, 존재하지 않으면 빈 벡터 반환
+    // SFTP 서버에서 특정 폴더의 파일 목록을 가져오는 메소드
+    public static List<ChannelSftp.LsEntry> listFiles(ChannelSftp channelSftp, String folderPath) throws SftpException {
         if (folderPath == null || folderPath.isEmpty()) {
             throw new IllegalArgumentException("Folder path cannot be null or empty.");
         }
-        return channelSftp.ls(folderPath);
+        @SuppressWarnings("unchecked")
+        Vector<ChannelSftp.LsEntry> vector = channelSftp.ls(folderPath);
+
+        // Vector를 ArrayList로 변환하여 반환
+        return new ArrayList<>(vector);
     }
+
 
     // SFTP 서버에서 파일을 읽어오는 메소드
     public static InputStream readFile(ChannelSftp channelSftp, String folderPath, String fileName) throws SftpException {

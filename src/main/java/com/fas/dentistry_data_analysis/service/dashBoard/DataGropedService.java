@@ -175,6 +175,7 @@ public class DataGropedService {
                     }
                 }
             }
+
         }
         // 구축율 계산
         for (Map<String, Object> diseaseData : groupedData.values()) {
