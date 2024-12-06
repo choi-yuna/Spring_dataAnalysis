@@ -172,18 +172,16 @@ public class AnalyzeBoardServiceImpl {
         }
 
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-        resultList.addAll(folderResultList);
 
-        // JSON 파일로 결과 저장 (특정 경로가 포함된 경우)
-        if (isExcelFileProcessed) {
-            if (targetDiseaseFolder != null) {
-                log.info("Saving results to target disease folder: {}", targetDiseaseFolder);
-                saveResultsToJsonSftp(targetDiseaseFolder, resultList, channelSftp);
-            } else {
-                log.info("Saving results to current folder: {}", folderPath);
-                saveResultsToJsonSftp(folderPath, folderResultList, channelSftp);
-            }
+        // 특정 질환 폴더에 독립적으로 저장
+        if (isExcelFileProcessed && targetDiseaseFolder != null) {
+            log.info("Saving results independently to target disease folder: {}", targetDiseaseFolder);
+            saveResultsToJsonSftp(targetDiseaseFolder, folderResultList, channelSftp); // **독립된 리스트 저장**
+        } else if (isExcelFileProcessed) {
+            saveResultsToJsonSftp(folderPath, folderResultList, channelSftp);
         }
+
+        resultList.addAll(folderResultList);
 
         // 하위 폴더 탐색 진행
         if (!stopSubfolderSearch.get()) {
@@ -197,6 +195,7 @@ public class AnalyzeBoardServiceImpl {
 
         executorService.shutdown();
     }
+
 
 
     private String getTargetDiseaseFolder(String folderPath) {
@@ -314,29 +313,17 @@ public class AnalyzeBoardServiceImpl {
                 .map(row -> (String) row.get("IMAGE_ID"))
                 .collect(Collectors.toSet());
 
+        // 중복된 IMAGE_ID 처리 방지
+        Set<String> newImageIds = imageIdsFromExcel.stream()
+                .filter(imageId -> !processedImageIds.contains(imageId)) // 중복되지 않은 IMAGE_ID만 선택
+                .collect(Collectors.toSet());
+
+        // 처리된 IMAGE_ID에 추가
+        processedImageIds.addAll(newImageIds);
+
         // JSON 파일에서 DISEASE_CLASS와 INSTITUTION_ID 추출
         String diseaseClass = null;
         String institutionId = null;
-
-//        // JSON 파일에서 질환과 기관 정보를 먼저 추출
-//        for (String jsonFileName : jsonFiles) {
-//            Map<String, String> jsonData = extractInstitutionAndDiseaseFromJson(channelSftp, jsonPath, jsonFileName);
-//            if (jsonData.get("DISEASE_CLASS") != null) {
-//                String JsonDiseaseClass = jsonData.get("DISEASE_CLASS");
-//                diseaseClass = ValueMapping.getDiseaseClass(JsonDiseaseClass);
-//            }
-//            if (jsonData.get("INSTITUTION_ID") != null) {
-//                String jsonInstitutionId = jsonData.get("INSTITUTION_ID");
-//                institutionId = ValueMapping.getInstitutionDescription(jsonInstitutionId);
-//            }
-//            if (diseaseClass != null && institutionId != null) break;  // 값이 모두 추출되면 종료
-//        }
-//
-//        if (diseaseClass == null || institutionId == null) {
-//            log.warn("Unable to determine DISEASE_CLASS or INSTITUTION_ID for file: {}", fileName);
-//            return;  // 필수 데이터가 없으면 중단
-//        }
-// 폴더명을 분석하여 DISEASE_CLASS와 INSTITUTION_ID 추출
 
         if (folderPath.contains("치주질환")) {
             diseaseClass = "치주질환";
@@ -344,13 +331,11 @@ public class AnalyzeBoardServiceImpl {
             diseaseClass = "두개안면";
         } else if (folderPath.contains("구강암")) {
             diseaseClass = "구강암";
-        }
-        else if (folderPath.contains("골수염")) {
+        } else if (folderPath.contains("골수염")) {
             diseaseClass = "골수염";
-        }
-        else if (folderPath.contains("대조군")) {
+        } else if (folderPath.contains("대조군")) {
             diseaseClass = "대조군";
-        }else {
+        } else {
             log.warn("Unknown disease class in folder path: {}", folderPath);
         }
 
@@ -362,21 +347,17 @@ public class AnalyzeBoardServiceImpl {
             institutionId = "단국대학교";
         } else if (folderPath.contains("국립암센터")) {
             institutionId = "국립암센터";
-        }else if (folderPath.contains("서울대")) {
+        } else if (folderPath.contains("서울대")) {
             institutionId = "서울대학교";
-        }else if (folderPath.contains("원광대")) {
-            institutionId = "원광대학교";}
-        else if (folderPath.contains("조선대")) {
-                institutionId = "조선대학교";
-        }else {
+        } else if (folderPath.contains("원광대")) {
+            institutionId = "원광대학교";
+        } else if (folderPath.contains("조선대")) {
+            institutionId = "조선대학교";
+        } else {
             log.warn("Unknown institution in folder path: {}", folderPath);
         }
 
 // DISEASE_CLASS와 INSTITUTION_ID가 모두 추출되지 않았을 경우 처리
-        if (diseaseClass == null || institutionId == null) {
-            log.warn("Unable to determine DISEASE_CLASS or INSTITUTION_ID for file: {}", fileName);
-            return;  // 필수 데이터가 없으면 중단
-        }
         if (diseaseClass == null || institutionId == null) {
             log.warn("Unable to determine DISEASE_CLASS or INSTITUTION_ID for file: {}", fileName);
             return;  // 필수 데이터가 없으면 중단
@@ -440,13 +421,20 @@ public class AnalyzeBoardServiceImpl {
             return; // 대조군 처리 후 종료
         }
 
-        if (!jsonFiles.isEmpty() && (folderPath.contains("치주질환") || folderPath.contains("두개안면")) ) {
+
+        if (!jsonFiles.isEmpty() && (folderPath.contains("치주질환") || folderPath.contains("두개안면"))) {
             incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링등록건수", jsonFiles.size());
         }
 
         // 엑셀 파일에서 추출된 IMAGE_ID와 JSON에서 얻은 DISEASE_CLASS, INSTITUTION_ID를 매핑하여 처리
         for (Map<String, Object> row : filteredData) {
             String imageId = (String) row.get("IMAGE_ID");
+
+            // 중복된 IMAGE_ID는 처리 건너뜀
+            if (!newImageIds.contains(imageId)) {
+                log.info("Skipping duplicate IMAGE_ID: {}", imageId);
+                continue;
+            }
 
             // 엑셀 파일에서 IMAGE_ID가 JSON 파일에 포함된 경우 처리
             if (imageIdsFromExcel.contains(imageId)) {
