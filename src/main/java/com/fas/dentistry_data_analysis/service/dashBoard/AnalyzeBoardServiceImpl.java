@@ -16,6 +16,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 @Slf4j
 @Service
@@ -33,6 +34,7 @@ public class AnalyzeBoardServiceImpl {
 
     private final DataGropedService dataGropedService;
     private final ExcelService excelService;
+    private static final List<String> DISEASE_FOLDER_NAMES = Arrays.asList("골수염", "치주질환", "구강암","두개안면기형");
 
     private final ExecutorService executorService = Executors.newFixedThreadPool(2 * Runtime.getRuntime().availableProcessors());
 
@@ -42,7 +44,6 @@ public class AnalyzeBoardServiceImpl {
     }
 
     public Map<String, Object> processFilesInFolder(String folderPath, boolean refresh) throws Exception {
-        folderFileCache.clear();
 
         List<Map<String, Object>> resultList = new ArrayList<>();
 
@@ -92,14 +93,15 @@ public class AnalyzeBoardServiceImpl {
             }
         }
 
-        log.info("Total number of unique image IDs: {}", uniqueImageIds.size());
-        log.info("Number of null image IDs: {}", nullCount);
-
         return response;
     }
 
-    private void processFolderRecursively(ChannelSftp channelSftp, String folderPath, List<Map<String, Object>> resultList, Set<String> processedImageIds, boolean refresh) throws Exception {
-        Vector<ChannelSftp.LsEntry> files;
+
+    private void processFolderRecursively(ChannelSftp channelSftp, String folderPath,
+                                          List<Map<String, Object>> resultList,
+                                          Set<String> processedImageIds,
+                                          boolean refresh) throws Exception {
+        List<ChannelSftp.LsEntry> files;
 
         try {
             // 디렉토리 파일 목록 가져오기
@@ -112,24 +114,27 @@ public class AnalyzeBoardServiceImpl {
             throw e; // 다른 예외는 재발생
         }
 
-        log.info("Found {} files in folder: {}", files.size(), folderPath);
+        String targetDiseaseFolder = getTargetDiseaseFolder(folderPath);
 
-        // JSON 파일 존재 여부와 refresh 파라미터에 따라 처리
-        String jsonFilePath = folderPath + "/analysis_result.json";
+        // JSON 파일 존재 여부 확인
+        String jsonFilePath = targetDiseaseFolder != null ? targetDiseaseFolder + "/analysis_result.json"
+                : folderPath + "/analysis_result.json";
+
         if (checkFileExistsInSFTP(channelSftp, folderPath, "analysis_result.json", "")) {
             if (refresh) {
+                folderFileCache.clear();
                 try {
                     SFTPClient.deleteFile(channelSftp, jsonFilePath);
-                    log.info("Existing analysis_result.json deleted for folder: {}", folderPath);
+                    log.info("Existing analysis_result.json deleted for folder: {}", jsonFilePath);
                 } catch (SftpException e) {
                     if (e.getMessage().contains("No such file")) {
-                        log.warn("No existing analysis_result.json to delete for folder: {}", folderPath);
+                        log.warn("No existing analysis_result.json to delete for folder: {}", jsonFilePath);
                     } else {
                         throw e; // 다른 예외는 재발생
                     }
                 }
             } else {
-                log.info("JSON result file already exists for folder: {}", folderPath);
+                log.info("JSON result file already exists for folder: {}", jsonFilePath);
                 List<Map<String, Object>> existingResults = loadResultsFromJsonSftp(folderPath, channelSftp);
                 resultList.addAll(existingResults);
                 return; // 추가 처리 건너뜁니다.
@@ -162,17 +167,22 @@ public class AnalyzeBoardServiceImpl {
 
                 isExcelFileProcessed = true;
                 stopSubfolderSearch.set(true);
-                break;
+                break; // 첫 번째 엑셀 파일만 처리
             }
         }
 
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
         resultList.addAll(folderResultList);
 
-        // JSON 파일로 결과 저장
+        // JSON 파일로 결과 저장 (특정 경로가 포함된 경우)
         if (isExcelFileProcessed) {
-            saveResultsToJsonSftp(folderPath, folderResultList, channelSftp);
-            log.info("Processed and saved results to JSON for folder: {}", folderPath);
+            if (targetDiseaseFolder != null) {
+                log.info("Saving results to target disease folder: {}", targetDiseaseFolder);
+                saveResultsToJsonSftp(targetDiseaseFolder, resultList, channelSftp);
+            } else {
+                log.info("Saving results to current folder: {}", folderPath);
+                saveResultsToJsonSftp(folderPath, folderResultList, channelSftp);
+            }
         }
 
         // 하위 폴더 탐색 진행
@@ -180,9 +190,6 @@ public class AnalyzeBoardServiceImpl {
             for (ChannelSftp.LsEntry entry : files) {
                 if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
                     String subFolderPath = folderPath + "/" + entry.getFilename();
-                    if (subFolderPath.contains("/Labelling/Labelling")) {
-                        continue;
-                    }
                     processFolderRecursively(channelSftp, subFolderPath, resultList, processedImageIds, refresh);
                 }
             }
@@ -190,6 +197,17 @@ public class AnalyzeBoardServiceImpl {
 
         executorService.shutdown();
     }
+
+
+    private String getTargetDiseaseFolder(String folderPath) {
+        for (String disease : DISEASE_FOLDER_NAMES) {
+            if (folderPath.contains(disease)) {
+                return folderPath.substring(0, folderPath.indexOf(disease) + disease.length());
+            }
+        }
+        return null; // 포함되지 않는 경우
+    }
+
 
 
     private List<Map<String, Object>> loadResultsFromJsonSftp(String folderPath, ChannelSftp channelSftp) throws IOException, SftpException {
@@ -212,6 +230,7 @@ public class AnalyzeBoardServiceImpl {
             Map<String, Object> resultData = new HashMap<>();
             resultData.put("DISEASE_CLASS", result.getOrDefault("DISEASE_CLASS", "N/A"));
             resultData.put("INSTITUTION_ID", result.getOrDefault("INSTITUTION_ID", "N/A"));
+            resultData.put("GROUP_TYPE", result.getOrDefault("GROUP_TYPE", "N/A"));
             resultData.put("라벨링등록건수", result.getOrDefault("라벨링등록건수", 0));
             resultData.put("라벨링pass건수", result.getOrDefault("라벨링pass건수", 0));
             resultData.put("1차검수", result.getOrDefault("1차검수", 0));
@@ -262,7 +281,7 @@ public class AnalyzeBoardServiceImpl {
 
         // 상태 업데이트
         if (allKeysExist) {
-            incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수",null);
+            incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);
         }
     }
 
@@ -280,7 +299,7 @@ public class AnalyzeBoardServiceImpl {
         String jsonPath = folderPath.contains("치주질환") ? folderPath + "/Labelling/meta" : folderPath + "/Labelling";
         Set<String> jsonFiles = folderFileCache.computeIfAbsent(jsonPath, path -> {
             try {
-                Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, path);
+                List<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, path);
                 return files.stream()
                         .map(ChannelSftp.LsEntry::getFilename)
                         .filter(name -> name.endsWith(".json"))
@@ -318,6 +337,7 @@ public class AnalyzeBoardServiceImpl {
 //            return;  // 필수 데이터가 없으면 중단
 //        }
 // 폴더명을 분석하여 DISEASE_CLASS와 INSTITUTION_ID 추출
+
         if (folderPath.contains("치주질환")) {
             diseaseClass = "치주질환";
         } else if (folderPath.contains("두개안면")) {
@@ -357,10 +377,70 @@ public class AnalyzeBoardServiceImpl {
             log.warn("Unable to determine DISEASE_CLASS or INSTITUTION_ID for file: {}", fileName);
             return;  // 필수 데이터가 없으면 중단
         }
+        if (diseaseClass == null || institutionId == null) {
+            log.warn("Unable to determine DISEASE_CLASS or INSTITUTION_ID for file: {}", fileName);
+            return;  // 필수 데이터가 없으면 중단
+        }
 
+        if (folderPath.contains("대조군")) {
+            folderFileCache.clear();
+            Set<String> subFolderNames = folderFileCache.computeIfAbsent(folderPath, path -> {
+                try {
+                    List<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, path);
 
-        // JSON 파일 개수로 라벨링등록건수 설정
-        if (!jsonFiles.isEmpty()) {
+                    // 반환된 데이터 상세 디버깅
+                    files.stream().forEach(entry -> {
+                    });
+
+                    return files.stream()
+                            .filter(entry -> {
+                                if (entry.getAttrs() == null) {
+                                    return false; // 속성이 null이면 제외
+                                }
+                                // 디렉토리인지 확인
+                                boolean isDirectory = entry.getAttrs().isDir();
+                                if (!isDirectory) {
+                                    return false;
+                                }
+                                String filename = entry.getFilename();
+                                // ".", ".." 같은 잘못된 폴더 제외
+                                if (filename == null || filename.equals(".") || filename.equals("..")) {
+                                    return false;
+                                }
+                                // 추가 필터: 이름이 특정 패턴을 따르지 않는 경우 제외 (예: ".json", ".xlsx" 등)
+                                if (filename.startsWith(".") || filename.endsWith(".json") || filename.endsWith(".xlsx")) {
+                                    return false;
+                                }
+                                return true; // 유효한 디렉토리
+                            })
+                            .map(ChannelSftp.LsEntry::getFilename)
+                            .collect(Collectors.toSet());
+
+                } catch (SftpException e) {
+                    if (e.getMessage().contains("Permission denied")) {
+                        log.error("Permission denied for path: {}", path);
+                    } else {
+                        log.error("Error accessing path: {}", path, e);
+                    }
+                    return Collections.emptySet(); // 빈 Set 반환
+                }
+            });
+
+            // 데이터 등록 건수 설정 (하위 폴더 수)
+            incrementStatus(resultList, institutionId, diseaseClass, "대조군", "라벨링등록건수", subFolderNames.size());
+
+        // 라벨링 PASS 건수 계산 (하위 폴더 이름을 IMAGE_ID와 비교)
+            for (String subFolderName : subFolderNames) {
+                boolean isMatched = imageIdsFromExcel.stream().anyMatch(imageId -> subFolderName.contains(imageId));
+                if (isMatched) {
+                    incrementStatus(resultList, institutionId, diseaseClass, "대조군", "라벨링pass건수", null);
+                }
+            }
+            stopSubfolderSearch.set(true); // 대조군은 하위 폴더 탐색 중지
+            return; // 대조군 처리 후 종료
+        }
+
+        if (!jsonFiles.isEmpty() && (folderPath.contains("치주질환") || folderPath.contains("두개안면")) ) {
             incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링등록건수", jsonFiles.size());
         }
 
@@ -371,7 +451,9 @@ public class AnalyzeBoardServiceImpl {
             // 엑셀 파일에서 IMAGE_ID가 JSON 파일에 포함된 경우 처리
             if (imageIdsFromExcel.contains(imageId)) {
                 boolean jsonExists = jsonFiles.stream().anyMatch(name -> name.contains(imageId));
-                if (!jsonExists) continue;
+                if (!jsonExists) {
+                    continue;
+                }
             }
 
             // 파일 존재 여부를 확인하는 부분 (치주질환 폴더 확인)
@@ -389,13 +471,13 @@ public class AnalyzeBoardServiceImpl {
                 dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm", "");
                 jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling/meta");
                 iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
-                toothExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/tooth");
-                tlaExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/tla");
-                cejExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/cej");
+               // toothExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/tooth");
+               // tlaExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/tla");
+                //cejExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/cej");
                 alveExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/alve");
                 if(jsonExists) {
-                    if ((dcmExists && iniExists && toothExists && tlaExists && cejExists && alveExists)) {
-                        incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수",null);
+                    if ((dcmExists && iniExists && alveExists)) {
+                        incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);
                         processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
                         stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
                     } else {
@@ -406,6 +488,7 @@ public class AnalyzeBoardServiceImpl {
             }
             else if (folderPath.contains("두개안면")) {
                 jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
+                // JSON 파일 개수로 라벨링등록건수 설정
                 if (jsonExists) {
                     try (InputStream jsonInputStream = SFTPClient.readFile(channelSftp, folderPath+"/Labelling", imageId + ".json")) {
                         // JSON 데이터 처리
@@ -421,9 +504,10 @@ public class AnalyzeBoardServiceImpl {
                 jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
                 iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
                 labellingExists = checkLabellingFileExistsInSFTPForImageId(channelSftp,folderPath+"/Labelling/Labelling", imageId);
-                if (jsonExists) {
-                    if ((dcmExists && labellingExists && iniExists)) {
-                        incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링pass건수",null);
+                if (jsonExists && labellingExists) {
+                    incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링등록건수",null);
+                    if ((dcmExists && iniExists)) {
+                        incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);
                         processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
                         stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
                     } else {
@@ -437,11 +521,13 @@ public class AnalyzeBoardServiceImpl {
         }
 
     }
+
+
     private boolean checkFileExistsInSFTPForImageId(ChannelSftp channelSftp, String folderPath, String imageId) throws SftpException {
         // 주어진 경로에 대한 캐시를 초기화하거나 가져옴
         Set<String> cachedFolders = folderFileCache.computeIfAbsent(folderPath, path -> {
             try {
-                Vector<ChannelSftp.LsEntry> entries = SFTPClient.listFiles(channelSftp, path);
+                List<ChannelSftp.LsEntry> entries = SFTPClient.listFiles(channelSftp, path);
                 Set<String> folderNames = new HashSet<>();
                 for (ChannelSftp.LsEntry entry : entries) {
                     if (entry.getAttrs().isDir()) { // 디렉토리만 추가
@@ -466,7 +552,7 @@ public class AnalyzeBoardServiceImpl {
             // 해당 폴더 내 파일 캐시 초기화 또는 가져오기
             Set<String> cachedFiles = folderFileCache.computeIfAbsent(targetFolderPath, path -> {
                 try {
-                    Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, path);
+                    List<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, path);
                     Set<String> fileNames = new HashSet<>();
                     for (ChannelSftp.LsEntry entry : files) {
                         fileNames.add(entry.getFilename());
@@ -490,7 +576,7 @@ public class AnalyzeBoardServiceImpl {
         // 캐시에서 파일/폴더 세트를 가져오거나 초기화
         Set<String> filesInCache = folderFileCache.computeIfAbsent(folderPath, path -> {
             try {
-                Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, path);
+                List<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, path);
                 return files.stream()
                         .map(ChannelSftp.LsEntry::getFilename)
                         .collect(Collectors.toSet());
@@ -539,8 +625,9 @@ public class AnalyzeBoardServiceImpl {
 //            if (firstCheckStatus) {
 //                incrementStatus(resultList, institutionId, diseaseClass, imageId, "1차검수");
 //            }
+
             if (secondCheckStatus) {
-                incrementStatus(resultList, institutionId, diseaseClass, imageId, "2차검수",null);
+                incrementStatus(resultList, institutionId, diseaseClass, null, "2차검수",0);  // 2 차검수 증가값 0으로 고정
             }
         } catch (Exception e) {
             log.error("Error while processing JSON file for Image ID: {}", imageId, e);
@@ -571,7 +658,7 @@ public class AnalyzeBoardServiceImpl {
 
     // 중복된 IMAGE_ID를 처리하는 방식 개선
     private void incrementStatus(List<Map<String, Object>> resultList, String institutionId, String diseaseClass,
-                                 String imageId, String status, Integer incrementValue) {
+                                 String groupData, String status, Integer incrementValue) {
         // INSTITUTION_ID와 DISEASE_CLASS를 기준으로 항목을 찾습니다.
         Optional<Map<String, Object>> existing = resultList.stream()
                 .filter(item -> institutionId.equals(item.get("INSTITUTION_ID"))
@@ -583,6 +670,7 @@ public class AnalyzeBoardServiceImpl {
             Map<String, Object> newEntry = new HashMap<>();
             newEntry.put("INSTITUTION_ID", institutionId);
             newEntry.put("DISEASE_CLASS", diseaseClass);  // DISEASE_CLASS 추가
+            newEntry.put("GROUP_TYPE", groupData);  // DISEASE_CLASS 추가
             newEntry.put("목표건수", 0);  // 목표건수는 초기화
             newEntry.put("라벨링등록건수", 0);
             newEntry.put("라벨링pass건수", 0);
@@ -612,7 +700,7 @@ public class AnalyzeBoardServiceImpl {
 
         Set<String> cachedFiles = folderFileCache.computeIfAbsent(targetPath, path -> {
             try {
-                Vector<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, targetPath);
+                List<ChannelSftp.LsEntry> files = SFTPClient.listFiles(channelSftp, targetPath);
                 Set<String> fileNames = new HashSet<>();
                 for (ChannelSftp.LsEntry entry : files) {
                     fileNames.add(entry.getFilename());

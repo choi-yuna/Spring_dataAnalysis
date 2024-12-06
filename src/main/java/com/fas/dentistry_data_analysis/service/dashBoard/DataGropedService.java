@@ -11,7 +11,8 @@ import java.util.stream.Collectors;
 public class DataGropedService {
 
     private static final Map<String, Map<String, Integer>> institutionDiseaseGoals = new HashMap<>();
-    private static final List<String> diseaseOrder = Arrays.asList("치주질환", "골수염", "구강암", "두개안면");
+    private static final Map<String, Map<String, Integer>> controlGroupDiseaseGoals = new HashMap<>();
+    private static final List<String> diseaseOrder = Arrays.asList("치주질환", "골수염","구강암", "두개안면");
 
     static {
         // Institution-wise disease goal data
@@ -51,8 +52,18 @@ public class DataGropedService {
         BRM.put("골수염", 272);
         BRM.put("구강암", 12);
         institutionDiseaseGoals.put("보라매병원", BRM);
-    }
 
+
+        Map<String, Integer> DKUGroup1 = new HashMap<>();
+        DKUGroup1.put("단국대학교(질환군)", 808);
+        DKUGroup1.put("단국대학교(대조군)", 570);
+        controlGroupDiseaseGoals.put("단국대학교", DKUGroup1);
+
+        Map<String, Integer> DKUGroup2 = new HashMap<>();
+        DKUGroup2.put("골수염(질환군)", 808);
+        DKUGroup2.put("골수염(대조군)", 570);
+        controlGroupDiseaseGoals.put("골수염", DKUGroup2);
+    }
 
     public List<Map<String, Object>> groupDataByDisease(List<Map<String, Object>> resultList) {
         Map<String, Map<String, Object>> groupedData = new HashMap<>();
@@ -65,26 +76,53 @@ public class DataGropedService {
             diseaseData.putIfAbsent("totalData", new ArrayList<>(Collections.nCopies(7, 0))); // 초기값 설정
             diseaseData.putIfAbsent("subData", new ArrayList<>());
 
-            // 모든 기관별로 목표 건수 초기화
             List<List<String>> subData = (List<List<String>>) diseaseData.get("subData");
+            List<List<String>> controlData = null;
+
+            // "골수염" 질환에 대해서만 controlData 추가
+            if (diseaseClass.equals("골수염")) {
+                controlData = new ArrayList<>();
+                diseaseData.put("controlData", controlData);
+            }
+
             for (Map.Entry<String, Map<String, Integer>> institutionEntry : institutionDiseaseGoals.entrySet()) {
                 String institutionId = institutionEntry.getKey();
                 int institutionGoalCount = institutionEntry.getValue().getOrDefault(diseaseClass, 0);
 
-                // 목표 건수가 0인 기관은 제외
-                if (institutionGoalCount == 0) continue;
+                if (institutionGoalCount > 0) {
+                    // subData에 데이터 추가 (모든 기관 데이터 포함)
+                    List<String> subRow = new ArrayList<>();
+                    subRow.add(institutionId); // 기관명
+                    subRow.add(String.valueOf(institutionGoalCount)); // 목표 건수
+                    subRow.add("0");
+                    subRow.add("0");
+                    subRow.add("0");
+                    subRow.add("0");
+                    subRow.add("0");
+                    subRow.add("0");
+                    subData.add(subRow);
+                }
 
-                // 기관별 초기 데이터 설정
-                List<String> subRow = new ArrayList<>();
-                subRow.add(institutionId); // 기관명
-                subRow.add(String.valueOf(institutionGoalCount)); // 목표 건수
-                subRow.add("0");
-                subRow.add("0");
-                subRow.add("0");
-                subRow.add("0");
-                subRow.add("0");
-                subRow.add("0");
-                subData.add(subRow);
+                // "골수염"에 대한 단국대학교 controlData 추가
+                if (diseaseClass.equals("골수염") && institutionId.equals("단국대학교")) {
+                    for (Map.Entry<String, Integer> controlGroupEntry : controlGroupDiseaseGoals.getOrDefault(institutionId, new HashMap<>()).entrySet()) {
+                        String controlGroupName = controlGroupEntry.getKey(); // "단국대학교 (대조군)" 또는 "단국대학교 (질환군)"
+                        int controlGroupGoalCount = controlGroupEntry.getValue();
+
+                        if (controlGroupGoalCount > 0) {
+                            List<String> controlRow = new ArrayList<>();
+                            controlRow.add(controlGroupName);
+                            controlRow.add(String.valueOf(controlGroupGoalCount));
+                            controlRow.add("0");
+                            controlRow.add("0");
+                            controlRow.add("0");
+                            controlRow.add("0");
+                            controlRow.add("0");
+                            controlRow.add("0");
+                            controlData.add(controlRow);
+                        }
+                    }
+                }
 
                 // 총 목표 건수 업데이트
                 List<Integer> totalData = (List<Integer>) diseaseData.get("totalData");
@@ -96,9 +134,13 @@ public class DataGropedService {
         for (Map<String, Object> item : resultList) {
             String diseaseClass = (String) item.get("DISEASE_CLASS");
             String institutionId = (String) item.get("INSTITUTION_ID");
+            String groupType = (String) item.get("GROUP_TYPE");
             if (diseaseClass == null || institutionId == null) continue;
 
             Map<String, Object> diseaseData = groupedData.get(diseaseClass);
+            List<List<String>> subData = (List<List<String>>) diseaseData.get("subData");
+            List<List<String>> controlData = diseaseClass.equals("골수염") ?
+                    (List<List<String>>) diseaseData.get("controlData") : null;
 
             // 총합 데이터 업데이트
             List<Integer> totalData = (List<Integer>) diseaseData.get("totalData");
@@ -111,8 +153,7 @@ public class DataGropedService {
             int secondCheck = (item.get("2차검수") != null) ? (int) item.get("2차검수") : 0;
             totalData.set(5, totalData.get(5) + secondCheck);
 
-            // 기관 데이터 업데이트
-            List<List<String>> subData = (List<List<String>>) diseaseData.get("subData");
+            // subData 업데이트 (모든 데이터 추가)
             for (List<String> subRow : subData) {
                 if (subRow.get(0).equals(institutionId)) {
                     subRow.set(2, String.valueOf(Integer.parseInt(subRow.get(2)) + labelingCount)); // 라벨링 등록건수
@@ -121,14 +162,31 @@ public class DataGropedService {
                     break;
                 }
             }
-        }
 
+            // controlData 업데이트 ("골수염"에 대한 단국대학교 대조군/질환군 구분 저장)
+            if (controlData != null && institutionId.equals("단국대학교")) {
+                String controlGroupName = (groupType != null && groupType.equals("대조군")) ? "단국대학교(대조군)" : "단국대학교(질환군)";
+                for (List<String> controlRow : controlData) {
+                    if (controlRow.get(0).equals(controlGroupName)) {
+                        controlRow.set(2, String.valueOf(Integer.parseInt(controlRow.get(2)) + labelingCount)); // 라벨링 등록건수
+                        controlRow.set(4, String.valueOf(Integer.parseInt(controlRow.get(4)) + firstCheck)); // 라벨링 pass건수
+                        controlRow.set(6, String.valueOf(Integer.parseInt(controlRow.get(6)) + secondCheck)); // 2차 검수
+                        break;
+                    }
+                }
+            }
+
+        }
         // 구축율 계산
         for (Map<String, Object> diseaseData : groupedData.values()) {
             List<List<String>> subData = (List<List<String>>) diseaseData.get("subData");
-            // 목표 건수가 0인 기관 제거
+            List<List<String>> controlData = diseaseData.containsKey("controlData") ?
+                    (List<List<String>>) diseaseData.get("controlData") : null;
+
+            // 목표 건수가 0인 기관 제거 (subData)
             subData.removeIf(subRow -> Integer.parseInt(subRow.get(1)) == 0);
 
+            // subData 구축율 계산
             for (List<String> subRow : subData) {
                 int institutionGoalCount = Integer.parseInt(subRow.get(1));
                 int LabellingCheck = Integer.parseInt(subRow.get(2));
@@ -139,9 +197,27 @@ public class DataGropedService {
                 int firstCheckRate = (institutionGoalCount > 0) ? (int) ((firstCheck / (double) institutionGoalCount) * 100) : 0;
                 int secondCheckRate = (institutionGoalCount > 0) ? (int) ((secondCheck / (double) institutionGoalCount) * 100) : 0;
 
-                subRow.set(3, String.valueOf(LabellingRate)); // 1차 구축율
+                subRow.set(3, String.valueOf(LabellingRate)); // 라벨링 구축율
                 subRow.set(5, String.valueOf(firstCheckRate)); // 1차 구축율
                 subRow.set(7, String.valueOf(secondCheckRate)); // 2차 구축율
+            }
+
+            // controlData 구축율 계산
+            if (controlData != null) {
+                for (List<String> controlRow : controlData) {
+                    int controlGroupGoalCount = Integer.parseInt(controlRow.get(1));
+                    int LabellingCheck = Integer.parseInt(controlRow.get(2));
+                    int firstCheck = Integer.parseInt(controlRow.get(4));
+                    int secondCheck = Integer.parseInt(controlRow.get(6));
+
+                    int LabellingRate = (controlGroupGoalCount > 0) ? (int) ((LabellingCheck / (double) controlGroupGoalCount) * 100) : 0;
+                    int firstCheckRate = (controlGroupGoalCount > 0) ? (int) ((firstCheck / (double) controlGroupGoalCount) * 100) : 0;
+                    int secondCheckRate = (controlGroupGoalCount > 0) ? (int) ((secondCheck / (double) controlGroupGoalCount) * 100) : 0;
+
+                    controlRow.set(3, String.valueOf(LabellingRate)); // 라벨링 구축율
+                    controlRow.set(5, String.valueOf(firstCheckRate)); // 1차 구축율
+                    controlRow.set(7, String.valueOf(secondCheckRate)); // 2차 구축율
+                }
             }
 
             // 총합 데이터 구축율 계산
@@ -151,12 +227,11 @@ public class DataGropedService {
             int totalFirstCheck = totalData.get(3);
             int totalSecondCheck = totalData.get(5);
 
-
             int totalLabellingRate = (totalGoalCount > 0) ? (int) ((totalLabellingCheck / (double) totalGoalCount) * 100) : 0;
             int totalFirstCheckRate = (totalGoalCount > 0) ? (int) ((totalFirstCheck / (double) totalGoalCount) * 100) : 0;
             int totalSecondCheckRate = (totalGoalCount > 0) ? (int) ((totalSecondCheck / (double) totalGoalCount) * 100) : 0;
 
-            totalData.set(2, totalLabellingRate); // 1차 구축율
+            totalData.set(2, totalLabellingRate); // 라벨링 구축율
             totalData.set(4, totalFirstCheckRate); // 1차 구축율
             totalData.set(6, totalSecondCheckRate); // 2차 구축율
         }
@@ -192,26 +267,53 @@ public class DataGropedService {
             institutionData.putIfAbsent("subData", new ArrayList<>());
 
             List<List<String>> subData = (List<List<String>>) institutionData.get("subData");
+            List<List<String>> controlData = null;
+
+            // 단국대학교인 경우에만 controlData 추가
+            if (institutionId.equals("단국대학교")) {
+                controlData = new ArrayList<>();
+                institutionData.put("controlData", controlData);
+            }
 
             // 모든 질환에 대해 초기 데이터 설정
             for (Map.Entry<String, Integer> diseaseEntry : institutionEntry.getValue().entrySet()) {
                 String diseaseClass = diseaseEntry.getKey();
                 int goalCount = diseaseEntry.getValue();
 
-                // 목표 건수가 0인 질환은 제외
-                if (goalCount == 0) continue;
+                if (goalCount > 0) {
+                    // subData에 데이터 추가
+                    List<String> subRow = new ArrayList<>();
+                    subRow.add(diseaseClass); // 질환명
+                    subRow.add(String.valueOf(goalCount)); // 목표 건수
+                    subRow.add("0"); // 라벨링 건수
+                    subRow.add("0");
+                    subRow.add("0");
+                    subRow.add("0");
+                    subRow.add("0");
+                    subRow.add("0");
+                    subData.add(subRow);
+                }
 
-                // 질환별 초기 데이터 설정
-                List<String> subRow = new ArrayList<>();
-                subRow.add(diseaseClass); // 질환명
-                subRow.add(String.valueOf(goalCount)); // 목표 건수
-                subRow.add("0"); // 라벨링 건수
-                subRow.add("0");
-                subRow.add("0");
-                subRow.add("0");
-                subRow.add("0");
-                subRow.add("0");
-                subData.add(subRow);
+                // 단국대학교의 "골수염" 데이터 처리
+                if (institutionId.equals("단국대학교") && diseaseClass.equals("골수염")) {
+                    for (Map.Entry<String, Integer> controlGroupEntry : controlGroupDiseaseGoals.getOrDefault(diseaseClass, new HashMap<>()).entrySet()) {
+                        String controlGroupName = controlGroupEntry.getKey(); // "골수염(대조군)" 또는 "골수염(질환군)"
+                        int controlGroupGoalCount = controlGroupEntry.getValue();
+
+                        if (controlGroupGoalCount > 0) {
+                            List<String> controlRow = new ArrayList<>();
+                            controlRow.add(controlGroupName);
+                            controlRow.add(String.valueOf(controlGroupGoalCount));
+                            controlRow.add("0");
+                            controlRow.add("0");
+                            controlRow.add("0");
+                            controlRow.add("0");
+                            controlRow.add("0");
+                            controlRow.add("0");
+                            controlData.add(controlRow);
+                        }
+                    }
+                }
 
                 // 총 목표 건수 업데이트
                 List<Integer> totalData = (List<Integer>) institutionData.get("totalData");
@@ -223,9 +325,13 @@ public class DataGropedService {
         for (Map<String, Object> item : resultList) {
             String institutionId = (String) item.get("INSTITUTION_ID");
             String diseaseClass = (String) item.get("DISEASE_CLASS");
+            String groupType = (String) item.get("GROUP_TYPE");
             if (institutionId == null || diseaseClass == null) continue;
 
             Map<String, Object> institutionData = groupedData.get(institutionId);
+            List<List<String>> subData = (List<List<String>>) institutionData.get("subData");
+            List<List<String>> controlData = institutionId.equals("단국대학교") ?
+                    (List<List<String>>) institutionData.get("controlData") : null;
 
             // 총합 데이터 업데이트
             List<Integer> totalData = (List<Integer>) institutionData.get("totalData");
@@ -238,8 +344,7 @@ public class DataGropedService {
             int secondCheck = (item.get("2차검수") != null) ? (int) item.get("2차검수") : 0;
             totalData.set(5, totalData.get(5) + secondCheck);
 
-            // subData 업데이트
-            List<List<String>> subData = (List<List<String>>) institutionData.get("subData");
+            // subData 업데이트 (모든 데이터 추가)
             for (List<String> subRow : subData) {
                 if (subRow.get(0).equals(diseaseClass)) {
                     subRow.set(2, String.valueOf(Integer.parseInt(subRow.get(2)) + labelingCount)); // 라벨링 건수
@@ -248,15 +353,26 @@ public class DataGropedService {
                     break;
                 }
             }
-        }
 
-        // 각 기관별로 subData (질환별) 정렬 및 구축율 계산
+            // controlData 업데이트 ("골수염"의 단국대학교 대조군/질환군 구분 저장)
+            if (controlData != null && diseaseClass.equals("골수염")) {
+                String controlGroupName = (groupType != null && groupType.equals("대조군")) ? "골수염(대조군)" : "골수염(질환군)";
+                for (List<String> controlRow : controlData) {
+                    if (controlRow.get(0).equals(controlGroupName)) {
+                        controlRow.set(2, String.valueOf(Integer.parseInt(controlRow.get(2)) + labelingCount)); // 라벨링 건수
+                        controlRow.set(4, String.valueOf(Integer.parseInt(controlRow.get(4)) + firstCheck)); // pass 건수
+                        controlRow.set(6, String.valueOf(Integer.parseInt(controlRow.get(6)) + secondCheck)); // 2차 검수
+                        break;
+                    }
+                }
+            }
+        }
+        // 각 기관별로 subData 및 controlData 구축율 계산
         for (Map<String, Object> institutionData : groupedData.values()) {
             List<List<String>> subData = (List<List<String>>) institutionData.get("subData");
 
-            // 질환별 정렬
+            // subData 정렬 및 구축율 계산
             subData.sort(Comparator.comparing(subRow -> diseaseOrder.indexOf(subRow.get(0))));
-
             for (List<String> subRow : subData) {
                 int goalCount = Integer.parseInt(subRow.get(1));
                 int labellingCheck = Integer.parseInt(subRow.get(2));
@@ -280,14 +396,33 @@ public class DataGropedService {
             int totalFirstCheck = totalData.get(3);
             int totalSecondCheck = totalData.get(5);
 
-
-            int totalFirstCheckRate = (totalGoalCount > 0) ? (int) ((totalFirstCheck / (double) totalGoalCount) * 100) : 0;
             int totalLabellingCheckRate = (totalGoalCount > 0) ? (int) ((totalLabellingCheck / (double) totalGoalCount) * 100) : 0;
+            int totalFirstCheckRate = (totalGoalCount > 0) ? (int) ((totalFirstCheck / (double) totalGoalCount) * 100) : 0;
             int totalSecondCheckRate = (totalGoalCount > 0) ? (int) ((totalSecondCheck / (double) totalGoalCount) * 100) : 0;
 
             totalData.set(2, totalLabellingCheckRate); // 라벨링 구축율
             totalData.set(4, totalFirstCheckRate); // 1차 구축율
             totalData.set(6, totalSecondCheckRate); // 2차 구축율
+
+            // controlData 구축율 계산 (단국대학교의 골수염 데이터만 처리)
+            if (institutionData.containsKey("controlData")) {
+                List<List<String>> controlData = (List<List<String>>) institutionData.get("controlData");
+                for (List<String> controlRow : controlData) {
+                    int controlGoalCount = Integer.parseInt(controlRow.get(1));
+                    int controlLabellingCheck = Integer.parseInt(controlRow.get(2));
+                    int controlFirstCheck = Integer.parseInt(controlRow.get(4));
+                    int controlSecondCheck = Integer.parseInt(controlRow.get(6));
+
+                    // 구축율 계산
+                    int controlLabellingRate = (controlGoalCount > 0) ? (int) ((controlLabellingCheck / (double) controlGoalCount) * 100) : 0;
+                    int controlFirstRate = (controlGoalCount > 0) ? (int) ((controlFirstCheck / (double) controlGoalCount) * 100) : 0;
+                    int controlSecondRate = (controlGoalCount > 0) ? (int) ((controlSecondCheck / (double) controlGoalCount) * 100) : 0;
+
+                    controlRow.set(3, String.valueOf(controlLabellingRate)); // 라벨링 구축율
+                    controlRow.set(5, String.valueOf(controlFirstRate)); // 1차 구축율
+                    controlRow.set(7, String.valueOf(controlSecondRate)); // 2차 구축율
+                }
+            }
         }
 
         // 기관을 가나다 순으로 정렬
