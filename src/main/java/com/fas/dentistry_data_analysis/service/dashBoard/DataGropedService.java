@@ -55,13 +55,13 @@ public class DataGropedService {
 
 
         Map<String, Integer> DKUGroup1 = new HashMap<>();
-        DKUGroup1.put("단국대학교(질환군)", 808);
-        DKUGroup1.put("단국대학교(대조군)", 570);
+        DKUGroup1.put("(질환군)", 808);
+        DKUGroup1.put("(대조군)", 570);
         controlGroupDiseaseGoals.put("단국대학교", DKUGroup1);
 
         Map<String, Integer> DKUGroup2 = new HashMap<>();
-        DKUGroup2.put("골수염(질환군)", 808);
-        DKUGroup2.put("골수염(대조군)", 570);
+        DKUGroup2.put("(질환군)", 808);
+        DKUGroup2.put("(대조군)", 570);
         controlGroupDiseaseGoals.put("골수염", DKUGroup2);
     }
 
@@ -112,7 +112,7 @@ public class DataGropedService {
                         if (controlGroupGoalCount > 0) {
                             List<String> controlRow = new ArrayList<>();
                             controlRow.add(controlGroupName);
-                            controlRow.add(String.valueOf(controlGroupGoalCount));
+                            controlRow.add(null);
                             controlRow.add("0");
                             controlRow.add("0");
                             controlRow.add("0");
@@ -165,7 +165,7 @@ public class DataGropedService {
 
             // controlData 업데이트 ("골수염"에 대한 단국대학교 대조군/질환군 구분 저장)
             if (controlData != null && institutionId.equals("단국대학교")) {
-                String controlGroupName = (groupType != null && groupType.equals("대조군")) ? "단국대학교(대조군)" : "단국대학교(질환군)";
+                String controlGroupName = (groupType != null && groupType.equals("대조군")) ? "(대조군)" : "(질환군)";
                 for (List<String> controlRow : controlData) {
                     if (controlRow.get(0).equals(controlGroupName)) {
                         controlRow.set(2, String.valueOf(Integer.parseInt(controlRow.get(2)) + labelingCount)); // 라벨링 등록건수
@@ -205,18 +205,18 @@ public class DataGropedService {
             // controlData 구축율 계산
             if (controlData != null) {
                 for (List<String> controlRow : controlData) {
-                    int controlGroupGoalCount = Integer.parseInt(controlRow.get(1));
+                    //int controlGroupGoalCount = Integer.parseInt(controlRow.get(1));
                     int LabellingCheck = Integer.parseInt(controlRow.get(2));
                     int firstCheck = Integer.parseInt(controlRow.get(4));
                     int secondCheck = Integer.parseInt(controlRow.get(6));
 
-                    int LabellingRate = (controlGroupGoalCount > 0) ? (int) ((LabellingCheck / (double) controlGroupGoalCount) * 100) : 0;
-                    int firstCheckRate = (controlGroupGoalCount > 0) ? (int) ((firstCheck / (double) controlGroupGoalCount) * 100) : 0;
-                    int secondCheckRate = (controlGroupGoalCount > 0) ? (int) ((secondCheck / (double) controlGroupGoalCount) * 100) : 0;
+                    //int LabellingRate = (controlGroupGoalCount > 0) ? (int) ((LabellingCheck / (double) controlGroupGoalCount) * 100) : 0;
+                   // int firstCheckRate = (controlGroupGoalCount > 0) ? (int) ((firstCheck / (double) controlGroupGoalCount) * 100) : 0;
+                    //int secondCheckRate = (controlGroupGoalCount > 0) ? (int) ((secondCheck / (double) controlGroupGoalCount) * 100) : 0;
 
-                    controlRow.set(3, String.valueOf(LabellingRate)); // 라벨링 구축율
-                    controlRow.set(5, String.valueOf(firstCheckRate)); // 1차 구축율
-                    controlRow.set(7, String.valueOf(secondCheckRate)); // 2차 구축율
+                    controlRow.set(3, null); // 라벨링 구축율
+                    controlRow.set(5, null); // 1차 구축율
+                    controlRow.set(7, null); // 2차 구축율
                 }
             }
 
@@ -303,7 +303,7 @@ public class DataGropedService {
                         if (controlGroupGoalCount > 0) {
                             List<String> controlRow = new ArrayList<>();
                             controlRow.add(controlGroupName);
-                            controlRow.add(String.valueOf(controlGroupGoalCount));
+                            controlRow.add(null);
                             controlRow.add("0");
                             controlRow.add("0");
                             controlRow.add("0");
@@ -356,7 +356,7 @@ public class DataGropedService {
 
             // controlData 업데이트 ("골수염"의 단국대학교 대조군/질환군 구분 저장)
             if (controlData != null && diseaseClass.equals("골수염")) {
-                String controlGroupName = (groupType != null && groupType.equals("대조군")) ? "골수염(대조군)" : "골수염(질환군)";
+                String controlGroupName = (groupType != null && groupType.equals("대조군")) ? "(대조군)" : "(질환군)";
                 for (List<String> controlRow : controlData) {
                     if (controlRow.get(0).equals(controlGroupName)) {
                         controlRow.set(2, String.valueOf(Integer.parseInt(controlRow.get(2)) + labelingCount)); // 라벨링 건수
@@ -408,19 +408,19 @@ public class DataGropedService {
             if (institutionData.containsKey("controlData")) {
                 List<List<String>> controlData = (List<List<String>>) institutionData.get("controlData");
                 for (List<String> controlRow : controlData) {
-                    int controlGoalCount = Integer.parseInt(controlRow.get(1));
+                    //int controlGoalCount = Integer.parseInt(controlRow.get(1));
                     int controlLabellingCheck = Integer.parseInt(controlRow.get(2));
                     int controlFirstCheck = Integer.parseInt(controlRow.get(4));
                     int controlSecondCheck = Integer.parseInt(controlRow.get(6));
 
                     // 구축율 계산
-                    int controlLabellingRate = (controlGoalCount > 0) ? (int) ((controlLabellingCheck / (double) controlGoalCount) * 100) : 0;
-                    int controlFirstRate = (controlGoalCount > 0) ? (int) ((controlFirstCheck / (double) controlGoalCount) * 100) : 0;
-                    int controlSecondRate = (controlGoalCount > 0) ? (int) ((controlSecondCheck / (double) controlGoalCount) * 100) : 0;
+                   // int controlLabellingRate = (controlGoalCount > 0) ? (int) ((controlLabellingCheck / (double) controlGoalCount) * 100) : 0;
+                   // int controlFirstRate = (controlGoalCount > 0) ? (int) ((controlFirstCheck / (double) controlGoalCount) * 100) : 0;
+                   // int controlSecondRate = (controlGoalCount > 0) ? (int) ((controlSecondCheck / (double) controlGoalCount) * 100) : 0;
 
-                    controlRow.set(3, String.valueOf(controlLabellingRate)); // 라벨링 구축율
-                    controlRow.set(5, String.valueOf(controlFirstRate)); // 1차 구축율
-                    controlRow.set(7, String.valueOf(controlSecondRate)); // 2차 구축율
+                    controlRow.set(3, null); // 라벨링 구축율
+                    controlRow.set(5, null); // 1차 구축율
+                    controlRow.set(7, null); // 2차 구축율
                 }
             }
         }
