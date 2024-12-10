@@ -698,4 +698,53 @@ public class TotalDataGropedService {
         return diseaseData;
     }
 
+    public List<Map<String, Object>> groupErrorData(List<Map<String, Object>> resultList) {
+        List<Map<String, Object>> transformedResponse = new ArrayList<>();
+
+        for (Map<String, Object> item : resultList) {
+            // 오류 데이터만 필터링
+            if (!item.containsKey("labelling_file")) {
+                continue; // 오류 데이터가 아닌 경우 건너뜀
+            }
+
+            // 각 데이터 항목에서 필요한 값 추출
+            String disease = (String) item.get("DISEASE_CLASS");
+            String hospital = (String) item.get("INSTITUTION_ID");
+            String fileId = (String) item.get("image_id");
+
+            // 필수 값이 없으면 건너뜀
+            if (disease == null || hospital == null || fileId == null) {
+                continue;
+            }
+
+            // 파일 상태 정보를 구성
+            List<Map<String, Object>> files = new ArrayList<>();
+            files.add(createFileStatus("dcm파일", item.getOrDefault("dcm_file", false)));
+            files.add(createFileStatus("json파일", item.getOrDefault("json_file", false)));
+            files.add(createFileStatus("ini파일", item.getOrDefault("ini_file", false)));
+            files.add(createFileStatus("라벨링파일", item.getOrDefault("labelling_file", false)));
+
+            // 결과 데이터를 구성
+            Map<String, Object> response = new HashMap<>();
+            response.put("disease", disease);
+            response.put("hospital", hospital);
+            response.put("fileId", fileId);
+            response.put("files", files);
+
+            // 최종 리스트에 추가
+            transformedResponse.add(response);
+        }
+
+        return transformedResponse;
+    }
+
+    // 파일 상태 정보를 생성하는 헬퍼 메소드
+    private Map<String, Object> createFileStatus(String fileName, Object exists) {
+        Map<String, Object> fileStatus = new HashMap<>();
+        fileStatus.put("name", fileName);
+        fileStatus.put("exists", (boolean) exists);
+        return fileStatus;
+    }
+
+
 }

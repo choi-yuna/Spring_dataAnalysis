@@ -70,6 +70,10 @@ public class AnalyzeBoardServiceImpl {
         log.info("{}",errorList);
         Map<String, Object> response = new HashMap<>();
 
+        List<Map<String, Object>> errorData = new ArrayList<>();
+        errorData.addAll(totalDataGropedService.groupErrorData(resultList));  // 그룹화된 데이터 추가
+        response.put("errorData", errorData);
+
         // 질환별 데이터 그룹화
         List<Map<String, Object>> totalDiseaseData = new ArrayList<>();
         totalDiseaseData.add(totalDataGropedService.createDiseaseData(resultList, "INSTITUTION_ID", "질환 ALL"));
@@ -81,18 +85,6 @@ public class AnalyzeBoardServiceImpl {
         totalInstitutionData.add(totalDataGropedService.createInstitutionData(resultList, "DISEASE_CLASS", "기관 ALL"));
         totalInstitutionData.addAll(totalDataGropedService.groupDataByInstitution(resultList));  // 그룹화된 데이터 추가
         response.put("기관별", totalInstitutionData);
-
-//        // 질환별 데이터 그룹화
-//        List<Map<String, Object>> diseaseData = new ArrayList<>();
-//        diseaseData.add(dataGropedService.createDiseaseData(resultList, "INSTITUTION_ID", "질환 ALL"));
-//        diseaseData.addAll(dataGropedService.groupDataByDisease(resultList));  // 그룹화된 데이터 추가
-//        response.put("질환별", diseaseData);
-//
-//        // 기관별 데이터 그룹화
-//        List<Map<String, Object>> institutionData = new ArrayList<>();
-//        institutionData.add(dataGropedService.createInstitutionData(resultList, "DISEASE_CLASS", "기관 ALL"));
-//        institutionData.addAll(dataGropedService.groupDataByInstitution(resultList));  // 그룹화된 데이터 추가
-//        response.put("기관별", institutionData);
 
         // 중복 체크
         Set<String> uniqueImageIds = new HashSet<>();
@@ -110,7 +102,6 @@ public class AnalyzeBoardServiceImpl {
 
         return response;
     }
-
 
     private void processFolderRecursively(ChannelSftp channelSftp, String folderPath,
                                           List<Map<String, Object>> resultList,
@@ -483,12 +474,12 @@ public class AnalyzeBoardServiceImpl {
             String imageId = (String) row.get("IMAGE_ID");
 
             // 엑셀 파일에서 IMAGE_ID가 JSON 파일에 포함된 경우 처리
-            if (imageIdsFromExcel.contains(imageId)) {
-                boolean jsonExists = jsonFiles.stream().anyMatch(name -> name.contains(imageId));
-                if (!jsonExists) {
-                    continue;
-                }
-            }
+//            if (imageIdsFromExcel.contains(imageId)) {
+//                boolean jsonExists = jsonFiles.stream().anyMatch(name -> name.contains(imageId));
+//                if (!jsonExists) {
+//                    continue;
+//                }
+//            }
 
             // 파일 존재 여부를 확인하는 부분 (치주질환 폴더 확인)
             boolean dcmExists = false;
