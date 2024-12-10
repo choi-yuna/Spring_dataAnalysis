@@ -19,7 +19,7 @@ import java.util.concurrent.ExecutionException;
 public class ExcelService {
 
     // 엑셀 파일 처리
-    public List<Map<String, Object>> processExcelFile(InputStream inputStream) throws IOException, ExecutionException, InterruptedException {
+    public List<Map<String, Object>> processExcelFile(InputStream inputStream, String diseaseClass) throws IOException, ExecutionException, InterruptedException {
         log.info("Processing Excel file");
 
         List<Map<String, Object>> filteredData = new ArrayList<>();
@@ -33,7 +33,7 @@ public class ExcelService {
             for (int i = 0; i < numberOfSheets; i++) {
                 Sheet sheet = workbook.getSheetAt(i);
 
-                if (!sheet.getSheetName().contains("CRF")) {
+                if (!(sheet.getSheetName().contains("CRF") && sheet.getSheetName().contains(diseaseClass))) {
                     continue;
                 }
 

@@ -148,11 +148,12 @@ public class TotalDataGropedService {
 
             // 총합 데이터 업데이트
             List<Integer> totalData = (List<Integer>) diseaseData.get("totalData");
-            int crfCount = (item.get("임상") != null) ? (int) item.get("임상") : 0;
-            totalData.set(1, totalData.get(1) + crfCount);
-
             int dcmCount = (item.get("영상") != null) ? (int) item.get("영상") : 0;
-            totalData.set(2, totalData.get(2) + dcmCount);
+            totalData.set(1, totalData.get(1) + dcmCount);
+
+            int crfCount = (item.get("임상") != null) ? (int) item.get("임상") : 0;
+            totalData.set(2, totalData.get(2) + crfCount);
+
 
             int jsonCount = (item.get("메타") != null) ? (int) item.get("메타") : 0;
             totalData.set(3, totalData.get(3) + jsonCount);
@@ -169,8 +170,8 @@ public class TotalDataGropedService {
             // subData 업데이트 (모든 데이터 추가)
             for (List<String> subRow : subData) {
                 if (subRow.get(0).equals(institutionId)) {
-                    subRow.set(2, String.valueOf(Integer.parseInt(subRow.get(2)) + crfCount));
-                    subRow.set(3, String.valueOf(Integer.parseInt(subRow.get(3)) + dcmCount));
+                    subRow.set(2, String.valueOf(Integer.parseInt(subRow.get(2)) + dcmCount));
+                    subRow.set(3, String.valueOf(Integer.parseInt(subRow.get(3)) + crfCount));
                     subRow.set(4, String.valueOf(Integer.parseInt(subRow.get(4)) + jsonCount));
                     subRow.set(5, String.valueOf(Integer.parseInt(subRow.get(5)) + drawingCount));
                     subRow.set(6, String.valueOf(Integer.parseInt(subRow.get(6)) + firstCheck)); // 라벨링 pass건수
@@ -184,8 +185,8 @@ public class TotalDataGropedService {
                 String controlGroupName = (groupType != null && groupType.equals("대조군")) ? "(대조군)" : "(질환군)";
                 for (List<String> controlRow : controlData) {
                     if (controlRow.get(0).equals(controlGroupName)) {
-                        controlRow.set(2, String.valueOf(Integer.parseInt(controlRow.get(2)) + crfCount)); // 라벨링 등록건수
-                        controlRow.set(3, String.valueOf(Integer.parseInt(controlRow.get(3)) + dcmCount)); // 라벨링 등록건수
+                        controlRow.set(2, String.valueOf(Integer.parseInt(controlRow.get(2)) + dcmCount)); // 라벨링 등록건수
+                        controlRow.set(3, String.valueOf(Integer.parseInt(controlRow.get(3)) + crfCount)); // 라벨링 등록건수
                         controlRow.set(4, String.valueOf(Integer.parseInt(controlRow.get(4)) + jsonCount)); // 라벨링 등록건수
                         controlRow.set(5, String.valueOf(Integer.parseInt(controlRow.get(5)) + drawingCount)); // 라벨링 등록건수
                         controlRow.set(6, String.valueOf(Integer.parseInt(controlRow.get(6)) + firstCheck)); // 라벨링 pass건수
@@ -351,11 +352,12 @@ public class TotalDataGropedService {
 
             // 총합 데이터 업데이트
             List<Integer> totalData = (List<Integer>) institutionData.get("totalData");
-            int crfCount = (item.get("임상") != null) ? (int) item.get("임상") : 0;
-            totalData.set(1, totalData.get(1) + crfCount);
-
             int dcmCount = (item.get("영상") != null) ? (int) item.get("영상") : 0;
-            totalData.set(2, totalData.get(2) + dcmCount);
+            totalData.set(1, totalData.get(1) + dcmCount);
+
+            int crfCount = (item.get("임상") != null) ? (int) item.get("임상") : 0;
+            totalData.set(2, totalData.get(2) + crfCount);
+
 
             int jsonCount = (item.get("메타") != null) ? (int) item.get("메타") : 0;
             totalData.set(3, totalData.get(3) + jsonCount);
@@ -372,8 +374,8 @@ public class TotalDataGropedService {
             // subData 업데이트 (모든 데이터 추가)
             for (List<String> subRow : subData) {
                 if (subRow.get(0).equals(diseaseClass)) {
-                    subRow.set(2, String.valueOf(Integer.parseInt(subRow.get(2)) + crfCount));
-                    subRow.set(3, String.valueOf(Integer.parseInt(subRow.get(3)) + dcmCount));
+                    subRow.set(2, String.valueOf(Integer.parseInt(subRow.get(2)) + dcmCount));
+                    subRow.set(3, String.valueOf(Integer.parseInt(subRow.get(3)) + crfCount));
                     subRow.set(4, String.valueOf(Integer.parseInt(subRow.get(4)) + jsonCount));
                     subRow.set(5, String.valueOf(Integer.parseInt(subRow.get(5)) + drawingCount));
                     subRow.set(6, String.valueOf(Integer.parseInt(subRow.get(6)) + firstCheck)); // 라벨링 pass건수
@@ -387,8 +389,8 @@ public class TotalDataGropedService {
                 String controlGroupName = (groupType != null && groupType.equals("대조군")) ? "(대조군)" : "(질환군)";
                 for (List<String> controlRow : controlData) {
                     if (controlRow.get(0).equals(controlGroupName)) {
-                        controlRow.set(2, String.valueOf(Integer.parseInt(controlRow.get(2)) + crfCount)); // 라벨링 등록건수
-                        controlRow.set(3, String.valueOf(Integer.parseInt(controlRow.get(3)) + dcmCount)); // 라벨링 등록건수
+                        controlRow.set(2, String.valueOf(Integer.parseInt(controlRow.get(2)) + dcmCount));
+                        controlRow.set(3, String.valueOf(Integer.parseInt(controlRow.get(3)) + crfCount));
                         controlRow.set(4, String.valueOf(Integer.parseInt(controlRow.get(4)) + jsonCount)); // 라벨링 등록건수
                         controlRow.set(5, String.valueOf(Integer.parseInt(controlRow.get(5)) + drawingCount)); // 라벨링 등록건수
                         controlRow.set(6, String.valueOf(Integer.parseInt(controlRow.get(6)) + firstCheck)); // 라벨링 pass건수
@@ -478,8 +480,8 @@ public class TotalDataGropedService {
                     .sum();
 
             groupData.put("목표건수", totalDiseaseGoal);
-            groupData.put("임상", 0);
             groupData.put("영상", 0);
+            groupData.put("임상", 0);
             groupData.put("메타", 0);
             groupData.put("drawing", 0);
             groupData.put("라벨링pass건수", 0);
@@ -497,14 +499,14 @@ public class TotalDataGropedService {
             if (groupedDataMap.containsKey(groupKey)) {
                 Map<String, Object> groupData = groupedDataMap.get(groupKey);
 
+                int dcmCount = (item.get("영상") != null) ? (int) item.get("영상") : 0;
+                groupData.put("영상", (int) groupData.get("영상") + dcmCount);
+                totalData.set(1, totalData.get(1) + dcmCount);
 
                 int crfCount = (item.get("임상") != null) ? (int) item.get("임상") : 0;
                 groupData.put("임상", (int) groupData.get("임상") + crfCount);
-                totalData.set(1, totalData.get(1) + crfCount);
+                totalData.set(2, totalData.get(2) + crfCount);
 
-                int dcmCount = (item.get("영상") != null) ? (int) item.get("영상") : 0;
-                groupData.put("영상", (int) groupData.get("영상") + dcmCount);
-                totalData.set(2, totalData.get(2) + dcmCount);
 
                 int jsonCount = (item.get("메타") != null) ? (int) item.get("메타") : 0;
                 groupData.put("메타", (int) groupData.get("메타") + jsonCount);
@@ -533,8 +535,8 @@ public class TotalDataGropedService {
             List<String> subRow = new ArrayList<>(Collections.nCopies(10, ""));
             subRow.set(0, groupKey); // 질환명
             subRow.set(1, groupData.get("목표건수").toString());
-            subRow.set(2, groupData.get("임상").toString());
-            subRow.set(3, groupData.get("영상").toString());
+            subRow.set(2, groupData.get("영상").toString());
+            subRow.set(3, groupData.get("임상").toString());
             subRow.set(4, groupData.get("메타").toString());
             subRow.set(5, groupData.get("drawing").toString());
             subRow.set(6, groupData.get("라벨링pass건수").toString());
@@ -597,8 +599,8 @@ public class TotalDataGropedService {
             Map<String, Object> institutionDataMap = groupedDataMap.get(institutionId);
             institutionDataMap.put("기관명", institutionId);
             institutionDataMap.put("목표건수", 0);
-            institutionDataMap.put("임상", 0);
             institutionDataMap.put("영상", 0);
+            institutionDataMap.put("임상", 0);
             institutionDataMap.put("메타", 0);
             institutionDataMap.put("drawing", 0);
             institutionDataMap.put("라벨링pass건수", 0);
@@ -619,13 +621,14 @@ public class TotalDataGropedService {
 
             Map<String, Object> institutionDataMap = groupedDataMap.get(institutionId);
 
-            int crfCount = (item.get("임상") != null) ? (int) item.get("임상") : 0;
-            institutionDataMap.put("임상", (int) institutionDataMap.get("임상") + crfCount);
-            totalData.set(1, totalData.get(1) + crfCount);
-
             int dcmCount = (item.get("영상") != null) ? (int) item.get("영상") : 0;
             institutionDataMap.put("영상", (int) institutionDataMap.get("영상") + dcmCount);
-            totalData.set(2, totalData.get(2) + dcmCount);
+            totalData.set(1, totalData.get(1) + dcmCount);
+
+            int crfCount = (item.get("임상") != null) ? (int) item.get("임상") : 0;
+            institutionDataMap.put("임상", (int) institutionDataMap.get("임상") + crfCount);
+            totalData.set(2, totalData.get(2) + crfCount);
+
 
             int jsonCount = (item.get("메타") != null) ? (int) item.get("메타") : 0;
             institutionDataMap.put("메타", (int) institutionDataMap.get("메타") + jsonCount);
@@ -653,8 +656,8 @@ public class TotalDataGropedService {
             List<String> subRow = new ArrayList<>(Collections.nCopies(10, ""));
             subRow.set(0, institutionId); // 기관명
             subRow.set(1, institutionDataMap.get("목표건수").toString());
-            subRow.set(2, institutionDataMap.get("임상").toString());
-            subRow.set(3, institutionDataMap.get("영상").toString());
+            subRow.set(2, institutionDataMap.get("영상").toString());
+            subRow.set(3, institutionDataMap.get("임상").toString());
             subRow.set(4, institutionDataMap.get("메타").toString());
             subRow.set(5, institutionDataMap.get("drawing").toString());
             subRow.set(6, institutionDataMap.get("라벨링pass건수").toString());
