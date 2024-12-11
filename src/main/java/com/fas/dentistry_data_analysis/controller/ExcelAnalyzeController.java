@@ -18,8 +18,8 @@ import java.util.concurrent.ExecutionException;
 @RequestMapping("/api")
 public class ExcelAnalyzeController {
 //
-//   private final String folderPath = "/치의학데이터 과제 데이터 수집/내부 데이터";
-    private final String folderPath = "/내부 데이터";
+  //private final String folderPath = "/치의학데이터 과제 데이터 수집/내부 데이터/SNU/치주질환";
+   private final String folderPath = "/내부 데이터";
 
 
         private final AnalyzeDataService analyzeDataService;
@@ -40,35 +40,14 @@ public class ExcelAnalyzeController {
     }
 
     // 기존 분석 API
-    @PostMapping("/analyze")
-    public ResponseEntity<?> analyzeData(@RequestBody AnalysisRequestDTO request) {
-        try {
-            String[] fileIds = request.getFileIds();
-            String diseaseClass = request.getDiseaseClass();
-            int institutionId = request.getInstitutionId();
-            log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", Arrays.toString(fileIds), diseaseClass, institutionId);
-            List<Map<String, String>> dataList = analyzeDataService.analyzeData(fileIds, diseaseClass, institutionId);
-            return ResponseEntity.ok(Map.of("data", dataList));
-        } catch (IOException e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("데이터 분석 중 오류가 발생했습니다.");
-        } catch (ExecutionException | InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /**
-     * 폴더 경로를 통한 CRF 분석
-     * @param
-     * @return
-     */
 //    @PostMapping("/analyze")
 //    public ResponseEntity<?> analyzeData(@RequestBody AnalysisRequestDTO request) {
 //        try {
+//            String[] fileIds = request.getFileIds();
 //            String diseaseClass = request.getDiseaseClass();
 //            int institutionId = request.getInstitutionId();
-//            log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", folderPath, diseaseClass, institutionId);
-//            List<Map<String, String>> dataList = analyzeDataService.analyzeFolderData(folderPath, diseaseClass, institutionId);
+//            log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", Arrays.toString(fileIds), diseaseClass, institutionId);
+//            List<Map<String, String>> dataList = analyzeDataService.analyzeData(fileIds, diseaseClass, institutionId);
 //            return ResponseEntity.ok(Map.of("data", dataList));
 //        } catch (IOException e) {
 //            e.printStackTrace();
@@ -77,6 +56,27 @@ public class ExcelAnalyzeController {
 //            throw new RuntimeException(e);
 //        }
 //    }
+
+    /**
+     * 폴더 경로를 통한 CRF 분석
+     * @param
+     * @return
+     */
+    @PostMapping("/analyze")
+    public ResponseEntity<?> analyzeData(@RequestBody AnalysisRequestDTO request) {
+        try {
+            String diseaseClass = request.getDiseaseClass();
+            int institutionId = request.getInstitutionId();
+            log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", "C:/app/dentistry", diseaseClass, institutionId);
+            List<Map<String, String>> dataList = analyzeDataService.analyzeFolderData(folderPath, diseaseClass, institutionId);
+            return ResponseEntity.ok(Map.of("data", dataList));
+        } catch (IOException e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("데이터 분석 중 오류가 발생했습니다.");
+        } catch (ExecutionException | InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     // 동적 필터링을 지원하는 새 API
     @PostMapping("/analyze-filters")
