@@ -699,7 +699,8 @@ public class TotalDataGropedService {
     }
 
     public List<Map<String, Object>> groupErrorData(List<Map<String, Object>> resultList) {
-        List<Map<String, Object>> transformedResponse = new ArrayList<>();
+        // 결과 데이터를 그룹화할 맵 초기화 (disease + hospital을 키로 사용)
+        Map<String, List<Map<String, Object>>> groupedData = new LinkedHashMap<>();
 
         for (Map<String, Object> item : resultList) {
             // 오류 데이터만 필터링
@@ -717,34 +718,50 @@ public class TotalDataGropedService {
                 continue;
             }
 
-            // 파일 상태 정보를 구성
-            List<Map<String, Object>> files = new ArrayList<>();
-            files.add(createFileStatus("dcm파일", item.getOrDefault("dcm_file", false)));
-            files.add(createFileStatus("json파일", item.getOrDefault("json_file", false)));
-            files.add(createFileStatus("ini파일", item.getOrDefault("ini_file", false)));
-            files.add(createFileStatus("라벨링파일", item.getOrDefault("labelling_file", false)));
+            // 키 생성 (질환 + 병원)
+            String key = disease + "::" + hospital;
 
-            // 결과 데이터를 구성
-            Map<String, Object> response = new HashMap<>();
-            response.put("disease", disease);
-            response.put("hospital", hospital);
-            response.put("fileId", fileId);
-            response.put("files", files);
+            // 그룹 데이터 가져오거나 초기화
+            groupedData.putIfAbsent(key, new ArrayList<>());
+            List<Map<String, Object>> fileList = groupedData.get(key);
 
-            // 최종 리스트에 추가
-            transformedResponse.add(response);
+            // 각 파일 ID별 파일 상태 구성
+            Map<String, Object> fileEntry = new LinkedHashMap<>();
+            fileEntry.put("fileId", fileId);
+            fileEntry.put("files", Arrays.asList(
+                    createFileStatus("dcm파일", item.getOrDefault("dcm_file", false)),
+                    createFileStatus("json파일", item.getOrDefault("json_file", false)),
+                    createFileStatus("ini파일", item.getOrDefault("ini_file", false)),
+                    createFileStatus("라벨링파일", item.getOrDefault("labelling_file", false))
+            ));
+
+            fileList.add(fileEntry);
         }
 
-        return transformedResponse;
+        // 결과 데이터를 변환하여 반환
+        List<Map<String, Object>> formattedResponse = new ArrayList<>();
+        for (Map.Entry<String, List<Map<String, Object>>> entry : groupedData.entrySet()) {
+            String[] keyParts = entry.getKey().split("::");
+
+            Map<String, Object> group = new LinkedHashMap<>();
+            group.put("disease", keyParts[0]); // 질환
+            group.put("hospital", keyParts[1]); // 병원
+            group.put("fileDetails", entry.getValue()); // 파일 ID와 상태 정보
+
+            formattedResponse.add(group);
+        }
+
+        return formattedResponse;
     }
 
     // 파일 상태 정보를 생성하는 헬퍼 메소드
     private Map<String, Object> createFileStatus(String fileName, Object exists) {
-        Map<String, Object> fileStatus = new HashMap<>();
+        Map<String, Object> fileStatus = new LinkedHashMap<>();
         fileStatus.put("name", fileName);
         fileStatus.put("exists", (boolean) exists);
         return fileStatus;
     }
+
 
 
 }
