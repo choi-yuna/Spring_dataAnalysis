@@ -702,6 +702,9 @@ public class TotalDataGropedService {
         // 결과 데이터를 그룹화할 맵 초기화 (disease + hospital을 키로 사용)
         Map<String, List<Map<String, Object>>> groupedData = new LinkedHashMap<>();
 
+        // 중복된 fileId 추적용 Set
+        Set<String> processedFileIds = new HashSet<>();
+
         for (Map<String, Object> item : resultList) {
             // 오류 데이터만 필터링
             if (!item.containsKey("labelling_file")) {
@@ -718,6 +721,11 @@ public class TotalDataGropedService {
                 continue;
             }
 
+            // 중복된 fileId 건너뛰기
+            if (!processedFileIds.add(fileId)) {
+                continue;
+            }
+
             // 키 생성 (질환 + 병원)
             String key = disease + "::" + hospital;
 
@@ -728,11 +736,14 @@ public class TotalDataGropedService {
             // 각 파일 ID별 파일 상태 구성
             Map<String, Object> fileEntry = new LinkedHashMap<>();
             fileEntry.put("fileId", fileId);
+
+            // "두개안면"인 경우 ini와 라벨링 파일을 null로 설정
+            boolean isTwoFacial = "두개안면".equals(disease);
             fileEntry.put("files", Arrays.asList(
                     createFileStatus("dcm파일", item.getOrDefault("dcm_file", false)),
                     createFileStatus("json파일", item.getOrDefault("json_file", false)),
-                    createFileStatus("ini파일", item.getOrDefault("ini_file", false)),
-                    createFileStatus("라벨링파일", item.getOrDefault("labelling_file", false))
+                    createFileStatus("ini파일", isTwoFacial ? null : item.getOrDefault("ini_file", false)),
+                    createFileStatus("라벨링파일", isTwoFacial ? null : item.getOrDefault("labelling_file", false))
             ));
 
             fileList.add(fileEntry);
@@ -743,10 +754,15 @@ public class TotalDataGropedService {
         for (Map.Entry<String, List<Map<String, Object>>> entry : groupedData.entrySet()) {
             String[] keyParts = entry.getKey().split("::");
 
+            // fileDetails를 fileId 기준으로 정렬
+            List<Map<String, Object>> sortedFileList = entry.getValue().stream()
+                    .sorted(Comparator.comparing(file -> (String) file.get("fileId")))
+                    .collect(Collectors.toList());
+
             Map<String, Object> group = new LinkedHashMap<>();
             group.put("disease", keyParts[0]); // 질환
             group.put("hospital", keyParts[1]); // 병원
-            group.put("fileDetails", entry.getValue()); // 파일 ID와 상태 정보
+            group.put("fileDetails", sortedFileList); // 정렬된 파일 ID와 상태 정보
 
             formattedResponse.add(group);
         }
@@ -758,10 +774,8 @@ public class TotalDataGropedService {
     private Map<String, Object> createFileStatus(String fileName, Object exists) {
         Map<String, Object> fileStatus = new LinkedHashMap<>();
         fileStatus.put("name", fileName);
-        fileStatus.put("exists", (boolean) exists);
+        fileStatus.put("exists", exists);
         return fileStatus;
     }
-
-
 
 }
