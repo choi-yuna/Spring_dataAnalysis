@@ -82,28 +82,36 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
             throw new IllegalArgumentException("지정된 경로가 유효하지 않거나 폴더가 아닙니다: " + folderPath);
         }
 
-        // 폴더 내의 모든 파일을 병렬로 처리하도록 스레드풀을 생성
+        // 이미 처리된 파일 추적용 Set
+        Set<String> processedFiles = new HashSet<>();
+
+        // 폴더 내의 모든 파일을 병렬로 처리
+        ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         List<Future<List<Map<String, String>>>> futureResults = new ArrayList<>();
         File[] files = folder.listFiles();
         if (files == null || files.length == 0) {
             throw new IOException("지정된 폴더에 파일이 없습니다.");
         }
 
-        // 폴더 내의 모든 파일을 병렬로 처리
         for (File file : files) {
+            // 이미 처리된 파일은 건너뜀
+            if (!file.isFile() || !processedFiles.add(file.getName())) {
+                continue;
+            }
+
             // 각 파일을 처리하는 작업을 병렬로 실행
-            Future<List<Map<String, String>>> future = executor.submit(() ->
-                    folderProcessorService.processFilesInFolder(folderPath, diseaseClass, institutionId)
-            );
-            futureResults.add(future);
+            futureResults.add(executor.submit(() ->
+                    fileProcessor.processFile(file, diseaseClass, institutionId)
+            ));
         }
 
-        // 병렬 처리 결과들을 결합
+        // 병렬 처리 결과를 결합
         List<Map<String, String>> combinedData = new ArrayList<>();
         for (Future<List<Map<String, String>>> future : futureResults) {
             combinedData.addAll(future.get()); // 결과를 합침
         }
 
+        executor.shutdown();
         return combinedData;
     }
 

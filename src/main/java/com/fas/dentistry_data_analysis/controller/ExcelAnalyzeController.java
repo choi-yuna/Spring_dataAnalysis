@@ -17,9 +17,9 @@ import java.util.concurrent.ExecutionException;
 @RestController
 @RequestMapping("/api")
 public class ExcelAnalyzeController {
-//
-  //private final String folderPath = "/치의학데이터 과제 데이터 수집/내부 데이터/SNU/치주질환";
-   private final String folderPath = "/내부 데이터";
+
+  private final String folderPath = "/치의학데이터 과제 데이터 수집/내부 데이터";
+//private final String folderPath = "/내부 데이터/단국대/골수염";
 
 
         private final AnalyzeDataService analyzeDataService;
@@ -68,7 +68,7 @@ public class ExcelAnalyzeController {
             String diseaseClass = request.getDiseaseClass();
             int institutionId = request.getInstitutionId();
             log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", "C:/app/dentistry", diseaseClass, institutionId);
-            List<Map<String, String>> dataList = analyzeDataService.analyzeFolderData(folderPath, diseaseClass, institutionId);
+            List<Map<String, String>> dataList = analyzeDataService.analyzeFolderData("C:/app/dentistry", diseaseClass, institutionId);
             return ResponseEntity.ok(Map.of("data", dataList));
         } catch (IOException e) {
             e.printStackTrace();

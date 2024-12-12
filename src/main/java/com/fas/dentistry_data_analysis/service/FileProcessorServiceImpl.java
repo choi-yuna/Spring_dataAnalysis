@@ -44,7 +44,10 @@ public class FileProcessorServiceImpl implements FileProcessor{
 
             for (int i = 0; i < numberOfSheets; i++) {
                 Sheet sheet = workbook.getSheetAt(i);
-                String sheetName = sheet.getSheetName().trim();
+                if (!(sheet.getSheetName().contains("CRF"))) {
+                    continue;
+                }
+                    String sheetName = sheet.getSheetName().trim();
                 List<String> expectedHeaders = SheetHeaderMapping.getHeadersForSheet(sheetName);
 
                 if (expectedHeaders != null) {  // 매핑된 헤더가 있는 경우에만 처리
