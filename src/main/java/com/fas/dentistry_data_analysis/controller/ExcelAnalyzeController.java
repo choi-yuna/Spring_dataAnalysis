@@ -80,7 +80,6 @@ private final String folderPath = "/내부 데이터";
             log.info("Analyzing data with filters: {}", filterRequest);
            List<String> fileIdsList = (List<String>) filterRequest.get("fileIds");
             log.info("Analyzing data : {}", fileIdsList);
-            String[] fileIds = fileIdsList.toArray(new String[0]);
             String StoragePath = storageConfig.getStoragePath();
             // 필터 조건 추출 (INSTITUTION_ID, P_GENDER 등)
             Map<String, String> filters = new HashMap<>();
@@ -93,7 +92,8 @@ private final String folderPath = "/내부 데이터";
             // header 값 추출
             List<String> headers = (List<String>) filterRequest.get("header");
             //log.info("Analyzing data with filters for file IDs: {}, filters: {}, headers: {}", Arrays.toString(fileIds), filters, headers);
-            if (fileIds != null && fileIds.length > 0) { // null 체크 추가
+            if (fileIdsList != null ) { // null 체크 추가
+                String[] fileIds = fileIdsList.toArray(new String[0]);
                 List<Map<String, Object>> filteredDataList = analyzeDataService.analyzeDataWithFilters(fileIds, filters, headers);
                 return ResponseEntity.ok(filteredDataList);
             }
