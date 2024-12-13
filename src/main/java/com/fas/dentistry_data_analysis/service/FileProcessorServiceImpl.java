@@ -1,7 +1,8 @@
 package com.fas.dentistry_data_analysis.service;
 
-import com.fas.dentistry_data_analysis.config.SheetHeaderMapping;
+import com.fas.dentistry_data_analysis.util.SheetHeaderMapping;
 import com.fas.dentistry_data_analysis.util.ExcelUtils;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
@@ -15,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+@Slf4j
 @Service
 public class FileProcessorServiceImpl implements FileProcessor{
 
@@ -40,16 +42,41 @@ public class FileProcessorServiceImpl implements FileProcessor{
         try (InputStream inputStream = new FileInputStream(excelFile);
              Workbook workbook = new XSSFWorkbook(inputStream)) {
 
+            String fileName = excelFile.getName();
             int numberOfSheets = workbook.getNumberOfSheets();
 
             for (int i = 0; i < numberOfSheets; i++) {
                 Sheet sheet = workbook.getSheetAt(i);
-                if (!(sheet.getSheetName().contains("CRF"))) {
-                    continue;
+                if (fileName.contains("두개안면")) {
+                    if (!((sheet.getSheetName().contains("CRF")) && (sheet.getSheetName().contains("두개안면기형")))) {
+                        continue; // "두개안면 CRF"가 아닌 경우 건너뜀
+                    }
+                }
+                else if (fileName.contains("치주질환")) {
+                    if (!((sheet.getSheetName().contains("CRF")) && (sheet.getSheetName().contains("치주질환")))) {
+                        continue; // "두개안면 CRF"가 아닌 경우 건너뜀
+                    }
+
+                }
+                else if (fileName.contains("구강암")) {
+                    if (!((sheet.getSheetName().contains("CRF")) && (sheet.getSheetName().contains("구강암")))) {
+                        continue; // "두개안면 CRF"가 아닌 경우 건너뜀
+                    }
+
+                }
+                else if (fileName.contains("골수염")) {
+                    if (!((sheet.getSheetName().contains("CRF")) && (sheet.getSheetName().contains("골수염")))) {
+                        continue; // "두개안면 CRF"가 아닌 경우 건너뜀
+                    }
+                }
+                else {
+                    // 일반 파일인 경우 "CRF"가 포함된 시트만 처리
+                    if (!(sheet.getSheetName().contains("CRF"))){
+                        continue;
+                    }
                 }
                     String sheetName = sheet.getSheetName().trim();
                 List<String> expectedHeaders = SheetHeaderMapping.getHeadersForSheet(sheetName);
-
                 if (expectedHeaders != null) {  // 매핑된 헤더가 있는 경우에만 처리
                     Row headerRow = sheet.getRow(3); // 4번째 행을 헤더로 설정
                     if (headerRow == null) {
@@ -70,6 +97,7 @@ public class FileProcessorServiceImpl implements FileProcessor{
 
                     Integer diseaseClassIndex = headerIndexMap.get("DISEASE_CLASS");
                     Integer institutionIdIndex = headerIndexMap.get("INSTITUTION_ID");
+                    Integer imageIdIndex = headerIndexMap.get("IMAGE_ID");
 
                     if (diseaseClassIndex != null && institutionIdIndex != null) {
                         for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) {  // 9번째 행부터 데이터 읽기
@@ -80,12 +108,13 @@ public class FileProcessorServiceImpl implements FileProcessor{
                                     Map<String, String> rowData = new LinkedHashMap<>();
                                     String diseaseClassValue = ExcelUtils.getCellValueAsString(row.getCell(diseaseClassIndex));
                                     String institutionIdValueStr = ExcelUtils.getCellValueAsString(row.getCell(institutionIdIndex));
-                                    if (!institutionIdValueStr.isEmpty()) {
+                                    String imageIdStr = ExcelUtils.getCellValueAsString(row.getCell(imageIdIndex));
+                                    if (!imageIdStr.isEmpty()) {
                                         try {
-                                            int institutionIdValue = Integer.parseInt(institutionIdValueStr);
-                                            // 필터링 조건 수정: 질환 또는 기관이 "0"이면 필터링하지 않음
-                                            if ((diseaseClass.equals("0") || diseaseClassValue.equals(diseaseClass)) &&
-                                                    (institutionId == 0 || institutionIdValue == institutionId)) {
+                                            // 빈 값도 허용하도록 수정: 빈 값인 경우 조건을 패스
+                                            if ((diseaseClass.equals("0") || diseaseClass.equals("") || diseaseClass.equals(diseaseClassValue)) &&
+                                                    (institutionId == 0 || institutionIdValueStr.isEmpty() || institutionId == Integer.parseInt(institutionIdValueStr))) {
+
                                                 for (String header : expectedHeaders) {
                                                     Integer cellIndex = headerIndexMap.get(header);
                                                     if (cellIndex != null) {

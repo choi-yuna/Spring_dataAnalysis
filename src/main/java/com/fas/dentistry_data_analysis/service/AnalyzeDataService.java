@@ -10,4 +10,5 @@ public interface AnalyzeDataService {
     List<Map<String, String>> analyzeFolderData(String folderPath, String diseaseClass, int institutionId) throws IOException, InterruptedException, ExecutionException;
 
     List<Map<String, Object>> analyzeDataWithFilters(String[] fileIds, Map<String, String> filterConditions, List<String> headers) throws IOException;
+    List<Map<String, Object>> analyzeFolderDataWithFilters(String folderPath, Map<String, String> filterConditions, List<String> headers) throws IOException;
 }

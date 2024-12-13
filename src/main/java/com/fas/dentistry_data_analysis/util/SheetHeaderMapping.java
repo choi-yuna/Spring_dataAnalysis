@@ -1,4 +1,4 @@
-package com.fas.dentistry_data_analysis.config;
+package com.fas.dentistry_data_analysis.util;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -26,6 +26,10 @@ public class SheetHeaderMapping {
                 "IMAGE_ID", "P_GENDER", "P_AGE","DI_NAME","DI_LOC","PT_TNM"
         ));
 
+        sheetHeaderMap.put("(두개안면기형) CRF", Arrays.asList(
+                "DISEASE_CLASS", "INSTITUTION_ID", "PATIENT_NO", "IMAGE_NO", "IMAGE_SRC", "CAPTURE_TIME",
+                "IMAGE_ID", "P_GENDER", "P_AGE","DI_DISEASE","DI_TIME","DI_DETAIL"
+        ));
         sheetHeaderMap.put("(두개안면기형) CRF", Arrays.asList(
                 "DISEASE_CLASS", "INSTITUTION_ID", "PATIENT_NO", "IMAGE_NO", "IMAGE_SRC", "CAPTURE_TIME",
                 "IMAGE_ID", "P_GENDER", "P_AGE","DI_DISEASE","DI_TIME","DI_DETAIL"

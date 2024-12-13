@@ -1,5 +1,6 @@
 package com.fas.dentistry_data_analysis.service.dashBoard;
 
+import com.fas.dentistry_data_analysis.config.StorageConfig;
 import com.fas.dentistry_data_analysis.service.FolderFileCacheManager;
 import com.fas.dentistry_data_analysis.util.SFTPClient;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -21,30 +22,32 @@ import java.util.stream.Collectors;
 @Service
 public class AnalyzeBoardServiceImpl {
     //원광대 서버 정보
-//    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
-//    private static final int SFTP_PORT = 2024;  // SFTP 포트
-//    private static final String SFTP_USER = "master01";  // 사용자 계정
-//    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
+    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
+    private static final int SFTP_PORT = 2024;  // SFTP 포트
+    private static final String SFTP_USER = "master01";  // 사용자 계정
+    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
     // SFTP 서버 정보
-    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
-    private static final int SFTP_PORT = 22;  // SFTP 포트
-    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
-    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
+//    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
+//    private static final int SFTP_PORT = 22;  // SFTP 포트
+//    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
+//    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
 
     private final DataGropedService dataGropedService;
     private final TotalDataGropedService totalDataGropedService;
     private final ExcelService excelService;
     private final FolderFileCacheManager folderFileCacheManager;
+    private final StorageConfig storageConfig;
 
 
     private static final List<String> DISEASE_FOLDER_NAMES = Arrays.asList("골수염", "치주질환", "구강암","두개안면기형");
 
 
-    public AnalyzeBoardServiceImpl(DataGropedService dataGropedService, ExcelService excelService, TotalDataGropedService totalDataGropedService,FolderFileCacheManager folderFileCacheManager) {
+    public AnalyzeBoardServiceImpl(DataGropedService dataGropedService, ExcelService excelService, TotalDataGropedService totalDataGropedService,FolderFileCacheManager folderFileCacheManager, StorageConfig storageConfig) {
         this.dataGropedService = dataGropedService;
         this.excelService = excelService;
         this.totalDataGropedService = totalDataGropedService;
         this.folderFileCacheManager = folderFileCacheManager;
+        this.storageConfig = storageConfig;
     }
 
     public Map<String, Object> processFilesInFolder(String folderPath, boolean refresh) throws Exception {
@@ -211,6 +214,7 @@ public class AnalyzeBoardServiceImpl {
 
     private void deleteExistingExcelFiles() {
         // 저장 디렉토리
+        String storagePath = storageConfig.getStoragePath();
         File dentistryDir = new File("C:/app/dentistry");
 
         if (!dentistryDir.exists()) {
@@ -235,7 +239,7 @@ public class AnalyzeBoardServiceImpl {
     }
 
 
-    private void saveExcelToLocal(ChannelSftp channelSftp, String folderPath, String fileName, String diseaseClass, String institutionId) {
+    private void saveExcelToLocal(ChannelSftp channelSftp, String folderPath, String fileName, String diseaseClass, String institutionId, String storagePath) {
         try {
             // 저장할 디렉터리 설정
             File dentistryDir = new File("C:/app/dentistry");
@@ -379,19 +383,19 @@ public class AnalyzeBoardServiceImpl {
             log.warn("Unknown disease class in folder path: {}", folderPath);
         }
 
-        if (folderPath.contains("KUR")) {
+        if (folderPath.contains("고려대")) {
             institutionId = "고려대학교";
-        } else if (folderPath.contains("BRM")) {
+        } else if (folderPath.contains("보라매")) {
             institutionId = "보라매병원";
-        } else if (folderPath.contains("DKU")) {
+        } else if (folderPath.contains("단국대")) {
             institutionId = "단국대학교";
         } else if (folderPath.contains("국립암센터")) {
             institutionId = "국립암센터";
-        } else if (folderPath.contains("SNU")) {
+        } else if (folderPath.contains("서울대")) {
             institutionId = "서울대학교";
-        } else if (folderPath.contains("WKU")) {
+        } else if (folderPath.contains("원광대")) {
             institutionId = "원광대학교";
-        } else if (folderPath.contains("CSU")) {
+        } else if (folderPath.contains("조선대")) {
             institutionId = "조선대학교";
         } else {
             log.warn("Unknown institution in folder path: {}", folderPath);
@@ -402,7 +406,8 @@ public class AnalyzeBoardServiceImpl {
             log.warn("Unable to determine DISEASE_CLASS or INSTITUTION_ID for file: {}", fileName);
             return;  // 필수 데이터가 없으면 중단
         }
-        saveExcelToLocal(channelSftp, folderPath, fileName, diseaseClass, institutionId);
+        String storagePath = storageConfig.getStoragePath();
+        saveExcelToLocal(channelSftp, folderPath, fileName, diseaseClass, institutionId,storagePath);
 
         // 엑셀 파일 처리 (엑셀 파일에는 DISEASE_CLASS와 INSTITUTION_ID가 없다)
         InputStream inputStream = SFTPClient.readFile(channelSftp, folderPath, fileName);
