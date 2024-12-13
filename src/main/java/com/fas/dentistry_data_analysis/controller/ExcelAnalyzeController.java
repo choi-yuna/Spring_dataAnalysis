@@ -69,17 +69,16 @@ private final String folderPath = "/내부 데이터";
     public ResponseEntity<?> analyzeData(@RequestBody AnalysisRequestDTO request) {
         try {
             String[] fileIds = request.getFileIds();
-            String StoragePath = storageConfig.getStoragePath();
+            String storagePath = storageConfig.getStoragePath();
             String diseaseClass = request.getDiseaseClass();
             int institutionId = request.getInstitutionId();
-            log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", "C:/app/dentistry", diseaseClass, institutionId);
+            log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", fileIds, diseaseClass, institutionId);
 
-            if(fileIds.length>0){
+            if (fileIds != null && fileIds.length > 0) { // null 체크 추가
                 List<Map<String, String>> dataList = analyzeDataService.analyzeData(fileIds, diseaseClass, institutionId);
                 return ResponseEntity.ok(Map.of("data", dataList));
-            }
-            else{
-            List<Map<String, String>> dataList = analyzeDataService.analyzeFolderData("C:/app/dentistry", diseaseClass, institutionId);
+            } else {
+                List<Map<String, String>> dataList = analyzeDataService.analyzeFolderData(storagePath, diseaseClass, institutionId);
                 return ResponseEntity.ok(Map.of("data", dataList));
             }
         } catch (IOException e) {
@@ -89,6 +88,7 @@ private final String folderPath = "/내부 데이터";
             throw new RuntimeException(e);
         }
     }
+
 
     // 동적 필터링을 지원하는 새 API
 //    @PostMapping("/analyze-filters")
