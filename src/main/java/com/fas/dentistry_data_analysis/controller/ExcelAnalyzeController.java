@@ -69,7 +69,7 @@ private final String folderPath = "/내부 데이터";
     public ResponseEntity<?> analyzeData(@RequestBody AnalysisRequestDTO request) {
         try {
             String[] fileIds = request.getFileIds();
-            String storagePath = storageConfig.getStoragePath();
+           // String storagePath = storageConfig.getStoragePath();
             String diseaseClass = request.getDiseaseClass();
             int institutionId = request.getInstitutionId();
             log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", fileIds, diseaseClass, institutionId);
@@ -78,7 +78,7 @@ private final String folderPath = "/내부 데이터";
                 List<Map<String, String>> dataList = analyzeDataService.analyzeData(fileIds, diseaseClass, institutionId);
                 return ResponseEntity.ok(Map.of("data", dataList));
             } else {
-                List<Map<String, String>> dataList = analyzeDataService.analyzeFolderData(storagePath, diseaseClass, institutionId);
+                List<Map<String, String>> dataList = analyzeDataService.analyzeFolderData("C:/app/dentistry", diseaseClass, institutionId);
                 return ResponseEntity.ok(Map.of("data", dataList));
             }
         } catch (IOException e) {
