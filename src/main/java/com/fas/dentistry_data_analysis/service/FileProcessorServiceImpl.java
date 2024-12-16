@@ -100,6 +100,7 @@ public class FileProcessorServiceImpl implements FileProcessor{
 
                     if (diseaseClassIndex != null && institutionIdIndex != null) {
                         for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) {  // 9번째 행부터 데이터 읽기
+
                             Row row = sheet.getRow(rowIndex);
                             if (row != null) {
                                 // 각 행을 병렬로 처리하도록 스레드풀에 제출
