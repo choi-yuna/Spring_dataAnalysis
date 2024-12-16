@@ -245,9 +245,9 @@ public class AnalyzeBoardServiceImpl {
             if (!dentistryDir.exists()) {
                 dentistryDir.mkdirs(); // 디렉터리가 없으면 생성
             }
-
+            String uuid = UUID.randomUUID().toString();
             // 파일 이름에 질환과 기관 정보를 추가
-            String newFileName = String.format("%s_%s_%s", diseaseClass, institutionId, fileName);
+            String newFileName = String.format("%s_%s_%s_%s", diseaseClass, institutionId, uuid,".xlsx");
             File localFile = new File(dentistryDir, newFileName);
 
             // 파일이 이미 존재하면 다시 다운로드하지 않음

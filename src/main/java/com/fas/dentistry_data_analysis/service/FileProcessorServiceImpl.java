@@ -98,39 +98,39 @@ public class FileProcessorServiceImpl implements FileProcessor{
                                     String diseaseClassValue = ExcelUtils.getCellValueAsString(row.getCell(diseaseClassIndex));
                                     String institutionIdValueStr = ExcelUtils.getCellValueAsString(row.getCell(institutionIdIndex));
 
-                                    // 기관 ID가 반드시 존재해야 함
-                                    if (institutionIdValueStr.isEmpty()) {
-                                        return Collections.emptyMap(); // 빈 결과 반환
+                                    if (!institutionIdValueStr.isEmpty()) {
+                                        try {
+                                            int institutionIdValue = Integer.parseInt(institutionIdValueStr);
+
+                                            // 필터 조건: 질환 클래스와 기관 ID 검사
+                                            if ((diseaseClass.equals("0") || diseaseClass.equals(diseaseClassValue)) &&
+                                                    (institutionId == 0 || institutionId == institutionIdValue)) {
+
+                                                // 필수 항목 처리
+                                                for (String header : requiredHeaders) {
+                                                    Integer cellIndex = headerIndexMap.get(header);
+                                                    String cellValue = (cellIndex != null && row.getCell(cellIndex) != null)
+                                                            ? ExcelUtils.getCellValueAsString(row.getCell(cellIndex))
+                                                            : "";
+                                                    requiredData.put(header, cellValue);
+                                                }
+
+                                                // 선택 항목 처리
+                                                for (String header : optionalHeaders) {
+                                                    Integer cellIndex = headerIndexMap.get(header);
+                                                    String cellValue = (cellIndex != null && row.getCell(cellIndex) != null)
+                                                            ? ExcelUtils.getCellValueAsString(row.getCell(cellIndex))
+                                                            : "";
+                                                    optionalData.put(header, cellValue);
+                                                }
+                                            }
+                                        } catch (NumberFormatException e) {
+                                            System.err.println("숫자로 변환할 수 없는 institutionId 값: " + institutionIdValueStr);
+                                        }
                                     }
 
-                                    try {
-                                        int institutionIdValue = Integer.parseInt(institutionIdValueStr);
-
-                                        // 필터 조건: 질환 클래스와 기관 ID 검사
-                                        if ((diseaseClass.equals("0") || diseaseClass.equals("") || diseaseClass.equals(diseaseClassValue)) &&
-                                                (institutionId == 0 || institutionId == institutionIdValue)) {
-
-                                            // 필수 항목 처리
-                                            for (String header : requiredHeaders) {
-                                                Integer cellIndex = headerIndexMap.get(header);
-                                                String cellValue = (cellIndex != null && row.getCell(cellIndex) != null)
-                                                        ? ExcelUtils.getCellValueAsString(row.getCell(cellIndex))
-                                                        : "";
-                                                requiredData.put(header, cellValue);
-                                            }
-
-                                            // 선택 항목 처리
-                                            for (String header : optionalHeaders) {
-                                                Integer cellIndex = headerIndexMap.get(header);
-                                                String cellValue = (cellIndex != null && row.getCell(cellIndex) != null)
-                                                        ? ExcelUtils.getCellValueAsString(row.getCell(cellIndex))
-                                                        : "";
-                                                optionalData.put(header, cellValue);
-                                            }
-                                        }
-                                    } catch (NumberFormatException e) {
-                                        System.err.println("숫자로 변환할 수 없는 institutionId 값: " + institutionIdValueStr);
-                                        return Collections.emptyMap(); // 빈 결과 반환
+                                    if (requiredData.isEmpty() && optionalData.isEmpty()) {
+                                        return Collections.emptyMap(); // 필수 및 선택 항목 모두 비어 있으면 제외
                                     }
 
                                     Map<String, Map<String, String>> rowData = new HashMap<>();
