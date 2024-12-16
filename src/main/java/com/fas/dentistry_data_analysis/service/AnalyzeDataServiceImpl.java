@@ -4,6 +4,7 @@ import com.fas.dentistry_data_analysis.util.ConditionMatcher;
 import com.fas.dentistry_data_analysis.util.ExcelUtils;
 import com.fas.dentistry_data_analysis.util.HeaderMapping;
 import com.fas.dentistry_data_analysis.util.ValueMapping;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -26,6 +27,7 @@ import java.util.function.Function;
 
 import static com.fas.dentistry_data_analysis.util.ExcelUtils.getCellValueAsString;
 
+@Slf4j
 @Service
 public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
 
@@ -278,7 +280,6 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         executor.shutdown();
         return combinedData;
     }
-
 
     @Override
     public List<Map<String, Object>> analyzeFolderDataWithFilters(String folderPath, Map<String, String> filterConditions, List<String> headers) throws IOException {

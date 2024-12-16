@@ -97,7 +97,6 @@ public class FileProcessorServiceImpl implements FileProcessor{
 
                     Integer diseaseClassIndex = headerIndexMap.get("DISEASE_CLASS");
                     Integer institutionIdIndex = headerIndexMap.get("INSTITUTION_ID");
-                    Integer imageIdIndex = headerIndexMap.get("IMAGE_ID");
 
                     if (diseaseClassIndex != null && institutionIdIndex != null) {
                         for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) {  // 9번째 행부터 데이터 읽기
@@ -108,13 +107,12 @@ public class FileProcessorServiceImpl implements FileProcessor{
                                     Map<String, String> rowData = new LinkedHashMap<>();
                                     String diseaseClassValue = ExcelUtils.getCellValueAsString(row.getCell(diseaseClassIndex));
                                     String institutionIdValueStr = ExcelUtils.getCellValueAsString(row.getCell(institutionIdIndex));
-                                    String imageIdStr = ExcelUtils.getCellValueAsString(row.getCell(imageIdIndex));
-                                    if (!imageIdStr.isEmpty()) {
+                                    if (!institutionIdValueStr.isEmpty()) {
                                         try {
+                                            int institutionIdValue = Integer.parseInt(institutionIdValueStr);
                                             // 빈 값도 허용하도록 수정: 빈 값인 경우 조건을 패스
                                             if ((diseaseClass.equals("0") || diseaseClass.equals("") || diseaseClass.equals(diseaseClassValue)) &&
-                                                    (institutionId == 0 || institutionIdValueStr.isEmpty() || institutionId == Integer.parseInt(institutionIdValueStr))) {
-
+                                                    (institutionId == 0 || institutionIdValueStr.isEmpty() || institutionId == institutionIdValue)) {
                                                 for (String header : expectedHeaders) {
                                                     Integer cellIndex = headerIndexMap.get(header);
                                                     if (cellIndex != null) {

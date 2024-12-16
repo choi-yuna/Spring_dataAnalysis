@@ -73,7 +73,6 @@ public class AnalyzeBoardServiceImpl {
             if (session != null) session.disconnect();
             log.info("SFTP connection closed");
         }
-        log.info("{}",errorList);
         Map<String, Object> response = new HashMap<>();
 
         List<Map<String, Object>> errorData = new ArrayList<>();

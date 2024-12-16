@@ -52,7 +52,7 @@ private final String folderPath = "/내부 데이터";
     public ResponseEntity<?> analyzeData(@RequestBody AnalysisRequestDTO request) {
         try {
             String[] fileIds = request.getFileIds();
-           // String storagePath = storageConfig.getStoragePath();
+           String storagePath = storageConfig.getStoragePath();
             String diseaseClass = request.getDiseaseClass();
             int institutionId = request.getInstitutionId();
             log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", fileIds, diseaseClass, institutionId);
@@ -71,8 +71,6 @@ private final String folderPath = "/내부 데이터";
             throw new RuntimeException(e);
         }
     }
-
-
     @PostMapping("/analyze-filters")
     public ResponseEntity<?> analyzeDataWithFilters(@RequestBody Map<String, Object> filterRequest) {
         try {
