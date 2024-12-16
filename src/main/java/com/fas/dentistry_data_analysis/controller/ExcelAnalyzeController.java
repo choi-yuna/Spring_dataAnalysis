@@ -1,6 +1,7 @@
 package com.fas.dentistry_data_analysis.controller;
 
 import com.fas.dentistry_data_analysis.DTO.AnalysisRequestDTO;
+import com.fas.dentistry_data_analysis.config.StorageConfig;
 import com.fas.dentistry_data_analysis.service.dashBoard.AnalyzeBoardServiceImpl;
 import com.fas.dentistry_data_analysis.service.AnalyzeDataService;
 import lombok.extern.slf4j.Slf4j;
@@ -17,18 +18,20 @@ import java.util.concurrent.ExecutionException;
 @RestController
 @RequestMapping("/api")
 public class ExcelAnalyzeController {
-//
-  //private final String folderPath = "/치의학데이터 과제 데이터 수집/내부 데이터/SNU/치주질환";
-   private final String folderPath = "/내부 데이터";
+
+ // private final String folderPath = "/치의학데이터 과제 데이터 수집/내부 데이터";
+private final String folderPath = "/내부 데이터";
 
 
         private final AnalyzeDataService analyzeDataService;
         private final AnalyzeBoardServiceImpl analyzeBoardService;
+        private final StorageConfig  storageConfig;
 
     @Autowired
-    public ExcelAnalyzeController(AnalyzeDataService analyzeDataService, AnalyzeBoardServiceImpl analyzeBoardService ) {
+    public ExcelAnalyzeController(AnalyzeDataService analyzeDataService, AnalyzeBoardServiceImpl analyzeBoardService, StorageConfig storageConfig ) {
         this.analyzeDataService = analyzeDataService;
         this.analyzeBoardService = analyzeBoardService;
+        this.storageConfig = storageConfig;
     }
 
     @PostMapping("/dashboard")
@@ -39,23 +42,6 @@ public class ExcelAnalyzeController {
         return ResponseEntity.ok(Map.of("data", stringObjectMap));
     }
 
-    // 기존 분석 API
-//    @PostMapping("/analyze")
-//    public ResponseEntity<?> analyzeData(@RequestBody AnalysisRequestDTO request) {
-//        try {
-//            String[] fileIds = request.getFileIds();
-//            String diseaseClass = request.getDiseaseClass();
-//            int institutionId = request.getInstitutionId();
-//            log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", Arrays.toString(fileIds), diseaseClass, institutionId);
-//            List<Map<String, String>> dataList = analyzeDataService.analyzeData(fileIds, diseaseClass, institutionId);
-//            return ResponseEntity.ok(Map.of("data", dataList));
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("데이터 분석 중 오류가 발생했습니다.");
-//        } catch (ExecutionException | InterruptedException e) {
-//            throw new RuntimeException(e);
-//        }
-//    }
 
     /**
      * 폴더 경로를 통한 CRF 분석
@@ -65,11 +51,19 @@ public class ExcelAnalyzeController {
     @PostMapping("/analyze")
     public ResponseEntity<?> analyzeData(@RequestBody AnalysisRequestDTO request) {
         try {
+            String[] fileIds = request.getFileIds();
+           String storagePath = storageConfig.getStoragePath();
             String diseaseClass = request.getDiseaseClass();
             int institutionId = request.getInstitutionId();
-            log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", "C:/app/dentistry", diseaseClass, institutionId);
-            List<Map<String, String>> dataList = analyzeDataService.analyzeFolderData(folderPath, diseaseClass, institutionId);
-            return ResponseEntity.ok(Map.of("data", dataList));
+            log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", fileIds, diseaseClass, institutionId);
+
+            if (fileIds != null && fileIds.length > 0) { // null 체크 추가
+                List<Map<String, String>> dataList = analyzeDataService.analyzeData(fileIds, diseaseClass, institutionId);
+                return ResponseEntity.ok(Map.of("data", dataList));
+            } else {
+                List<Map<String, String>> dataList = analyzeDataService.analyzeFolderData("C:/app/dentistry", diseaseClass, institutionId);
+                return ResponseEntity.ok(Map.of("data", dataList));
+            }
         } catch (IOException e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("데이터 분석 중 오류가 발생했습니다.");
@@ -77,17 +71,14 @@ public class ExcelAnalyzeController {
             throw new RuntimeException(e);
         }
     }
-
-    // 동적 필터링을 지원하는 새 API
     @PostMapping("/analyze-filters")
     public ResponseEntity<?> analyzeDataWithFilters(@RequestBody Map<String, Object> filterRequest) {
         try {
             // fileIds 추출
             log.info("Analyzing data with filters: {}", filterRequest);
-            List<String> fileIdsList = (List<String>) filterRequest.get("fileIds");
+           List<String> fileIdsList = (List<String>) filterRequest.get("fileIds");
             log.info("Analyzing data : {}", fileIdsList);
-            String[] fileIds = fileIdsList.toArray(new String[0]);
-
+            String StoragePath = storageConfig.getStoragePath();
             // 필터 조건 추출 (INSTITUTION_ID, P_GENDER 등)
             Map<String, String> filters = new HashMap<>();
             filterRequest.forEach((key, value) -> {
@@ -98,19 +89,26 @@ public class ExcelAnalyzeController {
 
             // header 값 추출
             List<String> headers = (List<String>) filterRequest.get("header");
-            log.info("Analyzing data with filters for file IDs: {}, filters: {}, headers: {}", Arrays.toString(fileIds), filters, headers);
-
-            // 동적 필터링과 헤더 필터링을 수행하고 List<Map<String, Object>> 반환
-            List<Map<String, Object>> filteredDataList = analyzeDataService.analyzeDataWithFilters(fileIds, filters, headers);
-
-            // 변환된 List를 클라이언트에 반환
+            //log.info("Analyzing data with filters for file IDs: {}, filters: {}, headers: {}", Arrays.toString(fileIds), filters, headers);
+            if (fileIdsList != null ) { // null 체크 추가
+                String[] fileIds = fileIdsList.toArray(new String[0]);
+                List<Map<String, Object>> filteredDataList = analyzeDataService.analyzeDataWithFilters(fileIds, filters, headers);
+                return ResponseEntity.ok(filteredDataList);
+            }
+            else {
+                // 동적 필터링과 헤더 필터링을 수행하고 List<Map<String, Object>> 반환
+                List<Map<String, Object>> filteredDataList = analyzeDataService.analyzeFolderDataWithFilters("C:/app/dentistry", filters, headers);
             return ResponseEntity.ok(filteredDataList);
+            }
+            // 변환된 List를 클라이언트에 반환
 
         } catch (IOException e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("데이터 분석 중 오류가 발생했습니다.");
         }
     }
+
+
 
 
 

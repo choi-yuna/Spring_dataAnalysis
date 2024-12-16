@@ -1,5 +1,6 @@
 package com.fas.dentistry_data_analysis.service.dashBoard;
 
+import com.fas.dentistry_data_analysis.config.StorageConfig;
 import com.fas.dentistry_data_analysis.service.FolderFileCacheManager;
 import com.fas.dentistry_data_analysis.util.SFTPClient;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -35,16 +36,18 @@ public class AnalyzeBoardServiceImpl {
     private final TotalDataGropedService totalDataGropedService;
     private final ExcelService excelService;
     private final FolderFileCacheManager folderFileCacheManager;
+    private final StorageConfig storageConfig;
 
 
     private static final List<String> DISEASE_FOLDER_NAMES = Arrays.asList("골수염", "치주질환", "구강암","두개안면기형");
 
 
-    public AnalyzeBoardServiceImpl(DataGropedService dataGropedService, ExcelService excelService, TotalDataGropedService totalDataGropedService,FolderFileCacheManager folderFileCacheManager) {
+    public AnalyzeBoardServiceImpl(DataGropedService dataGropedService, ExcelService excelService, TotalDataGropedService totalDataGropedService,FolderFileCacheManager folderFileCacheManager, StorageConfig storageConfig) {
         this.dataGropedService = dataGropedService;
         this.excelService = excelService;
         this.totalDataGropedService = totalDataGropedService;
         this.folderFileCacheManager = folderFileCacheManager;
+        this.storageConfig = storageConfig;
     }
 
     public Map<String, Object> processFilesInFolder(String folderPath, boolean refresh) throws Exception {
@@ -55,6 +58,8 @@ public class AnalyzeBoardServiceImpl {
         Session session = null;
         ChannelSftp channelSftp = null;
         Set<String> processedImageIds = new HashSet<>();  // 중복 처리용 전역 Set
+
+        if(refresh) deleteExistingExcelFiles();
 
         try {
             session = SFTPClient.createSession(SFTP_HOST, SFTP_USER, SFTP_PASSWORD, SFTP_PORT);
@@ -68,7 +73,6 @@ public class AnalyzeBoardServiceImpl {
             if (session != null) session.disconnect();
             log.info("SFTP connection closed");
         }
-        log.info("{}",errorList);
         Map<String, Object> response = new HashMap<>();
 
         List<Map<String, Object>> errorData = new ArrayList<>();
@@ -162,7 +166,6 @@ public class AnalyzeBoardServiceImpl {
         for (ChannelSftp.LsEntry entry : files) {
             String fileName = entry.getFilename();
             if (fileName.endsWith(".xlsx")) {
-               // saveExcelToLocal(channelSftp, folderPath, fileName);
                 synchronized (processedImageIds) {
                     processedImageIds.add(fileName);
                 }
@@ -207,38 +210,64 @@ public class AnalyzeBoardServiceImpl {
 
         executorService.shutdown();
     }
-//    private void saveExcelToLocal(ChannelSftp channelSftp, String folderPath, String fileName) {
-//        String saveDir = "C:/app/dentistry"; // 저장 디렉토리 지정 (배포 환경에 따라 조정)
-//        File dentistryDir = new File(saveDir);
-//
-//        // 디렉토리 생성
-//        if (!dentistryDir.exists() && !dentistryDir.mkdirs()) {
-//            throw new RuntimeException("Failed to create directory: " + saveDir);
-//        }
-//
-//        // 파일 저장 경로 설정
-//        File localFile = new File(dentistryDir, fileName);
-//
-//        // 파일이 이미 존재하면 건너뜀
-//        if (localFile.exists()) {
-//            log.info("Excel file already exists at: {}", localFile.getAbsolutePath());
-//            return;
-//        }
-//
-//        // 파일 저장
-//        try (InputStream inputStream = SFTPClient.readFile(channelSftp, folderPath, fileName);
-//             OutputStream outputStream = new FileOutputStream(localFile)) {
-//            byte[] buffer = new byte[1024];
-//            int bytesRead;
-//            while ((bytesRead = inputStream.read(buffer)) != -1) {
-//                outputStream.write(buffer, 0, bytesRead);
-//            }
-//            log.info("Excel file saved to: {}", localFile.getAbsolutePath());
-//        } catch (IOException | SftpException e) {
-//            log.error("Failed to save Excel file: {}", fileName, e);
-//            throw new RuntimeException("Failed to save Excel file: " + fileName, e);
-//        }
-//    }
+
+    private void deleteExistingExcelFiles() {
+        // 저장 디렉토리
+        String storagePath = storageConfig.getStoragePath();
+        File dentistryDir = new File("C:/app/dentistry");
+
+        if (!dentistryDir.exists()) {
+            log.info("Directory does not exist: {}", dentistryDir.getAbsolutePath());
+            return;
+        }
+
+        // 질환 및 기관에 해당하는 파일만 삭제
+        File[] filesToDelete = dentistryDir.listFiles((dir, name) ->
+                 name.endsWith(".xlsx")
+        );
+
+        if (filesToDelete != null) {
+            for (File file : filesToDelete) {
+                if (file.delete()) {
+                    log.info("Deleted existing file: {}", file.getName());
+                } else {
+                    log.warn("Failed to delete file: {}", file.getName());
+                }
+            }
+        }
+    }
+
+
+    private void saveExcelToLocal(ChannelSftp channelSftp, String folderPath, String fileName, String diseaseClass, String institutionId, String storagePath) {
+        try {
+            // 저장할 디렉터리 설정
+            File dentistryDir = new File("C:/app/dentistry");
+            if (!dentistryDir.exists()) {
+                dentistryDir.mkdirs(); // 디렉터리가 없으면 생성
+            }
+
+            // 파일 이름에 질환과 기관 정보를 추가
+            String newFileName = String.format("%s_%s_%s", diseaseClass, institutionId, fileName);
+            File localFile = new File(dentistryDir, newFileName);
+
+            // 파일이 이미 존재하면 다시 다운로드하지 않음
+            if (!localFile.exists()) {
+                try (InputStream inputStream = SFTPClient.readFile(channelSftp, folderPath, fileName);
+                     OutputStream outputStream = new FileOutputStream(localFile)) {
+                    byte[] buffer = new byte[1024];
+                    int bytesRead;
+                    while ((bytesRead = inputStream.read(buffer)) != -1) {
+                        outputStream.write(buffer, 0, bytesRead);
+                    }
+                }
+                log.info("Excel file saved to: {}", localFile.getAbsolutePath());
+            } else {
+                log.info("Excel file already exists at: {}", localFile.getAbsolutePath());
+            }
+        } catch (IOException | SftpException e) {
+            log.error("Error saving Excel file locally: {}", fileName, e);
+        }
+    }
 
 
 
@@ -348,7 +377,7 @@ public class AnalyzeBoardServiceImpl {
         } else if (folderPath.contains("골수염")) {
             diseaseClass = "골수염";
         } else if (folderPath.contains("대조군")) {
-            diseaseClass = "대조군";
+            diseaseClass = "골수염";
         } else {
             log.warn("Unknown disease class in folder path: {}", folderPath);
         }
@@ -376,6 +405,8 @@ public class AnalyzeBoardServiceImpl {
             log.warn("Unable to determine DISEASE_CLASS or INSTITUTION_ID for file: {}", fileName);
             return;  // 필수 데이터가 없으면 중단
         }
+        String storagePath = storageConfig.getStoragePath();
+        saveExcelToLocal(channelSftp, folderPath, fileName, diseaseClass, institutionId,storagePath);
 
         // 엑셀 파일 처리 (엑셀 파일에는 DISEASE_CLASS와 INSTITUTION_ID가 없다)
         InputStream inputStream = SFTPClient.readFile(channelSftp, folderPath, fileName);

@@ -10,40 +10,42 @@ public class ExcelUtils {
         if (cell == null) {
             return "";
         }
-        switch (cell.getCellType()) {
-            case STRING:
-                return cell.getStringCellValue();
-            case NUMERIC:
-                if (DateUtil.isCellDateFormatted(cell)) {
-                    return cell.getDateCellValue().toString();
-                } else {
-                    double numericValue = cell.getNumericCellValue();
-                    if (numericValue == (long) numericValue) {
-                        return String.valueOf((long) numericValue);
+        try {
+            switch (cell.getCellType()) {
+                case STRING:
+                    return cell.getStringCellValue();
+                case NUMERIC:
+                    if (DateUtil.isCellDateFormatted(cell)) {
+                        return cell.getDateCellValue().toString();
                     } else {
-                        return String.valueOf(numericValue);
+                        double numericValue = cell.getNumericCellValue();
+                        if (numericValue == (long) numericValue) {
+                            return String.valueOf((long) numericValue);
+                        } else {
+                            return String.valueOf(numericValue);
+                        }
                     }
-                }
-            case BOOLEAN:
-                return String.valueOf(cell.getBooleanCellValue());
-            case FORMULA:
-                FormulaEvaluator evaluator = cell.getSheet().getWorkbook().getCreationHelper().createFormulaEvaluator();
-                CellValue evaluatedValue = evaluator.evaluate(cell);
-                if (evaluatedValue != null) {
-                    switch (evaluatedValue.getCellType()) {
+                case BOOLEAN:
+                    return String.valueOf(cell.getBooleanCellValue());
+                case FORMULA:
+                    // 수식을 무시하고 캐시된 값 사용
+                    switch (cell.getCachedFormulaResultType()) {
                         case STRING:
-                            return evaluatedValue.getStringValue();
+                            return cell.getRichStringCellValue().getString();
                         case NUMERIC:
-                            return String.valueOf(evaluatedValue.getNumberValue());
+                            return String.valueOf(cell.getNumericCellValue());
                         case BOOLEAN:
-                            return String.valueOf(evaluatedValue.getBooleanValue());
+                            return String.valueOf(cell.getBooleanCellValue());
                         default:
                             return "";
                     }
-                }
-                return "";
-            default:
-                return "";
+                default:
+                    return "";
+            }
+        } catch (Exception e) {
+            // 오류 발생 시 빈 문자열 반환 및 로그 출력
+            System.err.println("Error processing cell: " + cell.getAddress() + ", " + e.getMessage());
+            return "";
         }
     }
 }
