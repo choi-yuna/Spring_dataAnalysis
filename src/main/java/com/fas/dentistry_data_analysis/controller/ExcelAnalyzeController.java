@@ -58,10 +58,10 @@ private final String folderPath = "/내부 데이터";
             log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", fileIds, diseaseClass, institutionId);
 
             if (fileIds != null && fileIds.length > 0) { // null 체크 추가
-                List<Map<String, String>> dataList = analyzeDataService.analyzeData(fileIds, diseaseClass, institutionId);
+                List<Map<String, Map<String, String>>>  dataList = analyzeDataService.analyzeData(fileIds, diseaseClass, institutionId);
                 return ResponseEntity.ok(Map.of("data", dataList));
             } else {
-                List<Map<String, String>> dataList = analyzeDataService.analyzeFolderData("C:/app/dentistry", diseaseClass, institutionId);
+                List<Map<String, Map<String, String>>>  dataList = analyzeDataService.analyzeFolderData("C:/app/dentistry", diseaseClass, institutionId);
                 return ResponseEntity.ok(Map.of("data", dataList));
             }
         } catch (IOException e) {

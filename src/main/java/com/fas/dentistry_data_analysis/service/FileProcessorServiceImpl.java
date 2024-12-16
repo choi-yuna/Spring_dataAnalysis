@@ -21,7 +21,7 @@ import java.util.concurrent.Future;
 public class FileProcessorServiceImpl implements FileProcessor{
 
     @Override
-    public List<Map<String, String>> processFile(File file, String diseaseClass, int institutionId) throws IOException {
+    public List<Map<String, Map<String, String>>> processFile(File file, String diseaseClass, int institutionId) throws IOException {
         String fileName = file.getName().toLowerCase();
 
         if (fileName.endsWith(".xlsx")) {
@@ -31,11 +31,11 @@ public class FileProcessorServiceImpl implements FileProcessor{
         }
     }
 
+
     @Override
-    // 엑셀 파일 처리 및 필터링 메소드
-    public List<Map<String, String>> processExcelFile(File excelFile, String diseaseClass, int institutionId) throws IOException {
-        List<Map<String, String>> dataList = new ArrayList<>();
-        List<Future<Map<String, String>>> futureResults = new ArrayList<>();
+    public List<Map<String, Map<String, String>>> processExcelFile(File excelFile, String diseaseClass, int institutionId) throws IOException {
+        List<Map<String, Map<String, String>>> dataList = new ArrayList<>();
+        List<Future<Map<String, Map<String, String>>>> futureResults = new ArrayList<>();
 
         ExecutorService executor = Executors.newFixedThreadPool(4); // 스레드풀 생성
 
@@ -47,49 +47,38 @@ public class FileProcessorServiceImpl implements FileProcessor{
 
             for (int i = 0; i < numberOfSheets; i++) {
                 Sheet sheet = workbook.getSheetAt(i);
-                if (fileName.contains("두개안면")) {
-                    if (!((sheet.getSheetName().contains("CRF")) && (sheet.getSheetName().contains("두개안면기형")))) {
-                        continue; // "두개안면 CRF"가 아닌 경우 건너뜀
-                    }
-                }
-                else if (fileName.contains("치주질환")) {
-                    if (!((sheet.getSheetName().contains("CRF")) && (sheet.getSheetName().contains("치주질환")))) {
-                        continue; // "두개안면 CRF"가 아닌 경우 건너뜀
-                    }
 
+                // 시트 이름 필터링
+                if (fileName.contains("두개안면") && !(sheet.getSheetName().contains("CRF") && sheet.getSheetName().contains("두개안면기형"))) {
+                    continue;
+                } else if (fileName.contains("치주질환") && !(sheet.getSheetName().contains("CRF") && sheet.getSheetName().contains("치주질환"))) {
+                    continue;
+                } else if (fileName.contains("구강암") && !(sheet.getSheetName().contains("CRF") && sheet.getSheetName().contains("구강암"))) {
+                    continue;
+                } else if (fileName.contains("골수염") && !(sheet.getSheetName().contains("CRF") && sheet.getSheetName().contains("골수염"))) {
+                    continue;
+                } else if (!(sheet.getSheetName().contains("CRF"))) {
+                    continue; // "CRF"가 없는 시트 건너뜀
                 }
-                else if (fileName.contains("구강암")) {
-                    if (!((sheet.getSheetName().contains("CRF")) && (sheet.getSheetName().contains("구강암")))) {
-                        continue; // "두개안면 CRF"가 아닌 경우 건너뜀
-                    }
 
-                }
-                else if (fileName.contains("골수염")) {
-                    if (!((sheet.getSheetName().contains("CRF")) && (sheet.getSheetName().contains("골수염")))) {
-                        continue; // "두개안면 CRF"가 아닌 경우 건너뜀
-                    }
-                }
-                else {
-                    // 일반 파일인 경우 "CRF"가 포함된 시트만 처리
-                    if (!(sheet.getSheetName().contains("CRF"))){
-                        continue;
-                    }
-                }
-                    String sheetName = sheet.getSheetName().trim();
-                List<String> expectedHeaders = SheetHeaderMapping.getHeadersForSheet(sheetName);
-                if (expectedHeaders != null) {  // 매핑된 헤더가 있는 경우에만 처리
+                String sheetName = sheet.getSheetName().trim();
+                Map<String, List<String>> headerConfig = SheetHeaderMapping.getHeadersForSheet(sheetName);
+                if (headerConfig != null) { // 매핑된 헤더가 있는 경우만 처리
+                    List<String> requiredHeaders = headerConfig.get("required");
+                    List<String> optionalHeaders = headerConfig.get("optional");
+
                     Row headerRow = sheet.getRow(3); // 4번째 행을 헤더로 설정
                     if (headerRow == null) {
                         throw new RuntimeException("헤더 행이 존재하지 않습니다. 파일을 확인해주세요.");
                     }
 
-                    // 엑셀 파일의 헤더를 읽어옴
+                    // 헤더 인덱스 매핑
                     Map<String, Integer> headerIndexMap = new HashMap<>();
                     for (int cellIndex = 0; cellIndex < headerRow.getLastCellNum(); cellIndex++) {
                         Cell cell = headerRow.getCell(cellIndex);
                         if (cell != null) {
                             String headerName = cell.getStringCellValue().trim();
-                            if (expectedHeaders.contains(headerName)) {
+                            if (requiredHeaders.contains(headerName) || optionalHeaders.contains(headerName)) {
                                 headerIndexMap.put(headerName, cellIndex);
                             }
                         }
@@ -99,34 +88,54 @@ public class FileProcessorServiceImpl implements FileProcessor{
                     Integer institutionIdIndex = headerIndexMap.get("INSTITUTION_ID");
 
                     if (diseaseClassIndex != null && institutionIdIndex != null) {
-                        for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) {  // 9번째 행부터 데이터 읽기
-
+                        for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) { // 9번째 행부터 데이터 읽기
                             Row row = sheet.getRow(rowIndex);
                             if (row != null) {
-                                // 각 행을 병렬로 처리하도록 스레드풀에 제출
-                                Future<Map<String, String>> future = executor.submit(() -> {
-                                    Map<String, String> rowData = new LinkedHashMap<>();
+                                Future<Map<String, Map<String, String>>> future = executor.submit(() -> {
+                                    Map<String, String> requiredData = new LinkedHashMap<>();
+                                    Map<String, String> optionalData = new LinkedHashMap<>();
+
                                     String diseaseClassValue = ExcelUtils.getCellValueAsString(row.getCell(diseaseClassIndex));
                                     String institutionIdValueStr = ExcelUtils.getCellValueAsString(row.getCell(institutionIdIndex));
-                                    if (!institutionIdValueStr.isEmpty()) {
-                                        try {
-                                            int institutionIdValue = Integer.parseInt(institutionIdValueStr);
-                                            // 빈 값도 허용하도록 수정: 빈 값인 경우 조건을 패스
-                                            if ((diseaseClass.equals("0") || diseaseClass.equals("") || diseaseClass.equals(diseaseClassValue)) &&
-                                                    (institutionId == 0 || institutionIdValueStr.isEmpty() || institutionId == institutionIdValue)) {
-                                                for (String header : expectedHeaders) {
-                                                    Integer cellIndex = headerIndexMap.get(header);
-                                                    if (cellIndex != null) {
-                                                        Cell cell = row.getCell(cellIndex);
-                                                        String cellValue = (cell != null) ? ExcelUtils.getCellValueAsString(cell) : "";
-                                                        rowData.put(header, cellValue);
-                                                    }
-                                                }
-                                            }
-                                        } catch (NumberFormatException e) {
-                                            System.err.println("숫자로 변환할 수 없는 institutionId 값: " + institutionIdValueStr);
-                                        }
+
+                                    // 기관 ID가 반드시 존재해야 함
+                                    if (institutionIdValueStr.isEmpty()) {
+                                        return Collections.emptyMap(); // 빈 결과 반환
                                     }
+
+                                    try {
+                                        int institutionIdValue = Integer.parseInt(institutionIdValueStr);
+
+                                        // 필터 조건: 질환 클래스와 기관 ID 검사
+                                        if ((diseaseClass.equals("0") || diseaseClass.equals("") || diseaseClass.equals(diseaseClassValue)) &&
+                                                (institutionId == 0 || institutionId == institutionIdValue)) {
+
+                                            // 필수 항목 처리
+                                            for (String header : requiredHeaders) {
+                                                Integer cellIndex = headerIndexMap.get(header);
+                                                String cellValue = (cellIndex != null && row.getCell(cellIndex) != null)
+                                                        ? ExcelUtils.getCellValueAsString(row.getCell(cellIndex))
+                                                        : "";
+                                                requiredData.put(header, cellValue);
+                                            }
+
+                                            // 선택 항목 처리
+                                            for (String header : optionalHeaders) {
+                                                Integer cellIndex = headerIndexMap.get(header);
+                                                String cellValue = (cellIndex != null && row.getCell(cellIndex) != null)
+                                                        ? ExcelUtils.getCellValueAsString(row.getCell(cellIndex))
+                                                        : "";
+                                                optionalData.put(header, cellValue);
+                                            }
+                                        }
+                                    } catch (NumberFormatException e) {
+                                        System.err.println("숫자로 변환할 수 없는 institutionId 값: " + institutionIdValueStr);
+                                        return Collections.emptyMap(); // 빈 결과 반환
+                                    }
+
+                                    Map<String, Map<String, String>> rowData = new HashMap<>();
+                                    rowData.put("required", requiredData);
+                                    rowData.put("optional", optionalData);
                                     return rowData;
                                 });
                                 futureResults.add(future);
@@ -136,10 +145,10 @@ public class FileProcessorServiceImpl implements FileProcessor{
                 }
             }
 
-            // 각 병렬 처리된 결과를 수집
-            for (Future<Map<String, String>> future : futureResults) {
+            // 병렬 처리된 결과를 수집
+            for (Future<Map<String, Map<String, String>>> future : futureResults) {
                 try {
-                    Map<String, String> result = future.get();
+                    Map<String, Map<String, String>> result = future.get();
                     if (!result.isEmpty()) {
                         dataList.add(result);
                     }

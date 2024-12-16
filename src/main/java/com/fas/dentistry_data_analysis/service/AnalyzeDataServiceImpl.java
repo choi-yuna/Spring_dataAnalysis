@@ -34,24 +34,23 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
     private final FileStorageService fileStorageService;
     private final ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
     private final FileProcessor fileProcessor;
-    private final FolderProcessorService folderProcessorService;
 
 
     @Autowired
-    public AnalyzeDataServiceImpl(FileStorageService fileStorageService, FileProcessor fileProcessor,FolderProcessorService folderProcessorService) {
+    public AnalyzeDataServiceImpl(FileStorageService fileStorageService, FileProcessor fileProcessor) {
         this.fileStorageService = fileStorageService;
         this.fileProcessor = fileProcessor;
-        this.folderProcessorService = folderProcessorService;
     }
 
     @Override
-    // 다중 파일 ID를 기반으로 데이터 분석을 수행하는 메소드
-    public List<Map<String, String>> analyzeData(String[] fileIds, String diseaseClass, int institutionId) throws IOException, InterruptedException, ExecutionException {
+// 다중 파일 ID를 기반으로 데이터 분석을 수행하는 메소드
+    public List<Map<String, Map<String, String>>> analyzeData(String[] fileIds, String diseaseClass, int institutionId)
+            throws IOException, InterruptedException, ExecutionException {
         if (fileIds == null || fileIds.length == 0) {
             throw new IllegalArgumentException("파일 ID 목록이 비어있거나 null입니다.");
         }
 
-        List<Future<List<Map<String, String>>>> futureResults = new ArrayList<>();
+        List<Future<List<Map<String, Map<String, String>>>>> futureResults = new ArrayList<>();
         for (String fileId : fileIds) {
             Path filePath = fileStorageService.getFilePath(fileId);
             if (filePath == null) {
@@ -59,17 +58,21 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
             }
 
             // 각 파일을 병렬 처리하도록 스레드풀에 제출
-            Future<List<Map<String, String>>> future = executor.submit(() -> fileProcessor.processFile(new File(filePath.toString()), diseaseClass, institutionId));
+            Future<List<Map<String, Map<String, String>>>> future = executor.submit(
+                    () -> fileProcessor.processFile(new File(filePath.toString()), diseaseClass, institutionId)
+            );
             futureResults.add(future);
         }
 
-        List<Map<String, String>> combinedData = new ArrayList<>();
-        for (Future<List<Map<String, String>>> future : futureResults) {
+        // 모든 파일의 데이터를 합치기
+        List<Map<String, Map<String, String>>> combinedData = new ArrayList<>();
+        for (Future<List<Map<String, Map<String, String>>>> future : futureResults) {
             combinedData.addAll(future.get()); // 결과를 합침
         }
 
         return combinedData;
     }
+
 
     @Override
     public List<Map<String, Object>> analyzeDataWithFilters(String[] fileIds, Map<String, String> filterConditions, List<String> headers) throws IOException {
@@ -233,11 +236,9 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         return responseList;
     }
 
-
-
-
     @Override
-    public List<Map<String, String>> analyzeFolderData(String folderPath, String diseaseClass, int institutionId) throws IOException, InterruptedException, ExecutionException {
+    public List<Map<String, Map<String, String>>> analyzeFolderData(String folderPath, String diseaseClass, int institutionId)
+            throws IOException, InterruptedException, ExecutionException {
         if (folderPath == null || folderPath.isEmpty()) {
             throw new IllegalArgumentException("폴더 경로가 비어있거나 null입니다.");
         }
@@ -253,7 +254,7 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
 
         // 폴더 내의 모든 파일을 병렬로 처리
         ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-        List<Future<List<Map<String, String>>>> futureResults = new ArrayList<>();
+        List<Future<List<Map<String, Map<String, String>>>>> futureResults = new ArrayList<>();
         File[] files = folder.listFiles();
         if (files == null || files.length == 0) {
             throw new IOException("지정된 폴더에 파일이 없습니다.");
@@ -272,14 +273,15 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         }
 
         // 병렬 처리 결과를 결합
-        List<Map<String, String>> combinedData = new ArrayList<>();
-        for (Future<List<Map<String, String>>> future : futureResults) {
+        List<Map<String, Map<String, String>>> combinedData = new ArrayList<>();
+        for (Future<List<Map<String, Map<String, String>>>> future : futureResults) {
             combinedData.addAll(future.get()); // 결과를 합침
         }
 
         executor.shutdown();
         return combinedData;
     }
+
 
     @Override
     public List<Map<String, Object>> analyzeFolderDataWithFilters(String folderPath, Map<String, String> filterConditions, List<String> headers) throws IOException {
