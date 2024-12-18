@@ -95,49 +95,61 @@ public class FileProcessorServiceImpl implements FileProcessor{
                                     Map<String, String> requiredData = new LinkedHashMap<>();
                                     Map<String, String> optionalData = new LinkedHashMap<>();
 
+                                    // 질환 클래스와 기관 ID 값 가져오기
                                     String diseaseClassValue = ExcelUtils.getCellValueAsString(row.getCell(diseaseClassIndex));
                                     String institutionIdValueStr = ExcelUtils.getCellValueAsString(row.getCell(institutionIdIndex));
 
-                                    if (!institutionIdValueStr.isEmpty()) {
-                                        try {
-                                            int institutionIdValue = Integer.parseInt(institutionIdValueStr);
+                                    // 질환 클래스 또는 기관 ID가 비어 있으면 제외
+                                    if (diseaseClassValue == null || diseaseClassValue.isEmpty() ||
+                                            institutionIdValueStr == null || institutionIdValueStr.isEmpty()) {
+                                        return Collections.emptyMap(); // 빠르게 제외
+                                    }
 
-                                            // 필터 조건: 질환 클래스와 기관 ID 검사
-                                            if ((diseaseClass.equals("0") || diseaseClass.equals(diseaseClassValue)) &&
-                                                    (institutionId == 0 || institutionId == institutionIdValue)) {
+                                    try {
+                                        int institutionIdValue = Integer.parseInt(institutionIdValueStr);
 
-                                                // 필수 항목 처리
-                                                for (String header : requiredHeaders) {
-                                                    Integer cellIndex = headerIndexMap.get(header);
-                                                    String cellValue = (cellIndex != null && row.getCell(cellIndex) != null)
-                                                            ? ExcelUtils.getCellValueAsString(row.getCell(cellIndex))
-                                                            : "";
-                                                    requiredData.put(header, cellValue);
-                                                }
+                                        // 필터 조건: 질환 클래스와 기관 ID 검사
+                                        if (!((diseaseClass.equals("0") || diseaseClass.equals(diseaseClassValue)) &&
+                                                (institutionId == 0 || institutionId == institutionIdValue))) {
+                                            return Collections.emptyMap(); // 조건에 맞지 않으면 제외
+                                        }
+                                    } catch (NumberFormatException e) {
+                                        System.err.println("숫자로 변환할 수 없는 institutionId 값: " + institutionIdValueStr);
+                                        return Collections.emptyMap(); // 숫자 변환 실패 시 제외
+                                    }
 
-                                                // 선택 항목 처리
-                                                for (String header : optionalHeaders) {
-                                                    Integer cellIndex = headerIndexMap.get(header);
-                                                    String cellValue = (cellIndex != null && row.getCell(cellIndex) != null)
-                                                            ? ExcelUtils.getCellValueAsString(row.getCell(cellIndex))
-                                                            : "";
-                                                    optionalData.put(header, cellValue);
-                                                }
-                                            }
-                                        } catch (NumberFormatException e) {
-                                            System.err.println("숫자로 변환할 수 없는 institutionId 값: " + institutionIdValueStr);
+                                    // 필수 항목 처리
+                                    for (String header : requiredHeaders) {
+                                        Integer cellIndex = headerIndexMap.get(header);
+                                        if (cellIndex != null) {
+                                            Cell cell = row.getCell(cellIndex);
+                                            String cellValue = (cell != null) ? ExcelUtils.getCellValueAsString(cell) : "";
+                                            requiredData.put(header, cellValue);
                                         }
                                     }
 
-                                    if (requiredData.isEmpty() && optionalData.isEmpty()) {
-                                        return Collections.emptyMap(); // 필수 및 선택 항목 모두 비어 있으면 제외
+                                    // 선택 항목 처리
+                                    for (String header : optionalHeaders) {
+                                        Integer cellIndex = headerIndexMap.get(header);
+                                        if (cellIndex != null) {
+                                            Cell cell = row.getCell(cellIndex);
+                                            String cellValue = (cell != null) ? ExcelUtils.getCellValueAsString(cell) : "";
+                                            optionalData.put(header, cellValue);
+                                        }
                                     }
 
+                                    // 필수 및 선택 항목이 모두 비어 있으면 제외
+                                    if (requiredData.isEmpty() && optionalData.isEmpty()) {
+                                        return Collections.emptyMap();
+                                    }
+
+                                    // 결과 데이터 생성
                                     Map<String, Map<String, String>> rowData = new HashMap<>();
                                     rowData.put("required", requiredData);
                                     rowData.put("optional", optionalData);
                                     return rowData;
                                 });
+
                                 futureResults.add(future);
                             }
                         }
