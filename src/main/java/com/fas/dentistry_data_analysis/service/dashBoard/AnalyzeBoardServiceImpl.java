@@ -37,7 +37,7 @@ public class AnalyzeBoardServiceImpl {
     private final ExcelService excelService;
     private final FolderFileCacheManager folderFileCacheManager;
     private final StorageConfig storageConfig;
-
+    private final AtomicBoolean refreshInProgress = new AtomicBoolean(false);
 
     private static final List<String> DISEASE_FOLDER_NAMES = Arrays.asList("골수염", "치주질환", "구강암","두개안면기형");
 
@@ -50,8 +50,15 @@ public class AnalyzeBoardServiceImpl {
         this.storageConfig = storageConfig;
     }
 
-    public Map<String, Object> processFilesInFolder(String folderPath, boolean refresh) throws Exception {
+    public boolean isRefreshInProgress() {
+        return refreshInProgress.get();
+    }
 
+    public Map<String, Object> processFilesInFolder(String folderPath, boolean refresh) throws Exception {
+        folderFileCacheManager.clearCache();
+        if (refresh && !refreshInProgress.compareAndSet(false, true)) {
+            throw new IllegalStateException("Refresh is already in progress.");
+        }
         List<Map<String, Object>> resultList = new ArrayList<>();
         List<Map<String, Object>> errorList = new ArrayList<>();
 
@@ -69,6 +76,9 @@ public class AnalyzeBoardServiceImpl {
             processFolderRecursively(channelSftp, folderPath, resultList, errorList, processedImageIds, refresh);
 
         } finally {
+            if (refresh) {
+                refreshInProgress.set(false);
+            }
             if (channelSftp != null) channelSftp.disconnect();
             if (session != null) session.disconnect();
             log.info("SFTP connection closed");
@@ -151,8 +161,8 @@ public class AnalyzeBoardServiceImpl {
                 resultList.addAll(existingResults);
                 return; // 추가 처리 건너뜁니다.
             }
-        }
 
+        }
         // 결과를 새로 분석하는 로직
         List<Map<String, Object>> folderResultList = new ArrayList<>();
         List<Map<String, Object>> folderErrorList = new ArrayList<>();
@@ -245,9 +255,9 @@ public class AnalyzeBoardServiceImpl {
             if (!dentistryDir.exists()) {
                 dentistryDir.mkdirs(); // 디렉터리가 없으면 생성
             }
-
+            String uuid = UUID.randomUUID().toString();
             // 파일 이름에 질환과 기관 정보를 추가
-            String newFileName = String.format("%s_%s_%s", diseaseClass, institutionId, fileName);
+            String newFileName = String.format("%s_%s_%s_%s", diseaseClass, institutionId, uuid,".xlsx");
             File localFile = new File(dentistryDir, newFileName);
 
             // 파일이 이미 존재하면 다시 다운로드하지 않음
@@ -390,7 +400,7 @@ public class AnalyzeBoardServiceImpl {
             institutionId = "단국대학교";
         } else if (folderPath.contains("국립암센터")) {
             institutionId = "국립암센터";
-        } else if (folderPath.contains("서울대")) {
+        } else if (folderPath.contains("SNU")) {
             institutionId = "서울대학교";
         } else if (folderPath.contains("원광대")) {
             institutionId = "원광대학교";
