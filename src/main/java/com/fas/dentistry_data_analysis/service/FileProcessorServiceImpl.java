@@ -16,6 +16,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+
 @Slf4j
 @Service
 public class FileProcessorServiceImpl implements FileProcessor{
@@ -31,9 +35,21 @@ public class FileProcessorServiceImpl implements FileProcessor{
         }
     }
 
+    public List<String> loadPassIdsFromJson(String filePath) {
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            // JSON 파일에서 ID 리스트 불러오기
+            return objectMapper.readValue(new File(filePath), new TypeReference<List<String>>() {});
+        } catch (IOException e) {
+            log.error("Pass된 ID를 JSON에서 읽는 중 오류가 발생했습니다: {}", filePath, e);
+            return Collections.emptyList(); // 읽기에 실패한 경우 빈 리스트 반환
+        }
+    }
 
     @Override
     public List<Map<String, Map<String, String>>> processExcelFile(File excelFile, String diseaseClass, int institutionId) throws IOException {
+
+        List<String> passIds = loadPassIdsFromJson("C:/app/id/pass_ids.json");
         List<Map<String, Map<String, String>>> dataList = new ArrayList<>();
         List<Future<Map<String, Map<String, String>>>> futureResults = new ArrayList<>();
 
@@ -86,6 +102,7 @@ public class FileProcessorServiceImpl implements FileProcessor{
 
                     Integer diseaseClassIndex = headerIndexMap.get("DISEASE_CLASS");
                     Integer institutionIdIndex = headerIndexMap.get("INSTITUTION_ID");
+                    Integer imageIdIndex = headerIndexMap.get("IMAGE_ID");
 
                     if (diseaseClassIndex != null && institutionIdIndex != null) {
                         for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) { // 9번째 행부터 데이터 읽기
@@ -95,9 +112,16 @@ public class FileProcessorServiceImpl implements FileProcessor{
                                     Map<String, String> requiredData = new LinkedHashMap<>();
                                     Map<String, String> optionalData = new LinkedHashMap<>();
 
+                                    // Pass된 ID인지 확인
+                                    String imageIdValue = ExcelUtils.getCellValueAsString(row.getCell(imageIdIndex));
                                     // 질환 클래스와 기관 ID 값 가져오기
                                     String diseaseClassValue = ExcelUtils.getCellValueAsString(row.getCell(diseaseClassIndex));
                                     String institutionIdValueStr = ExcelUtils.getCellValueAsString(row.getCell(institutionIdIndex));
+
+                                    if (!passIds.contains(imageIdValue)) {
+                                        return Collections.emptyMap();
+                                    }
+
 
                                     // 질환 클래스 또는 기관 ID가 비어 있으면 제외
                                     if (diseaseClassValue == null || diseaseClassValue.isEmpty() ||
