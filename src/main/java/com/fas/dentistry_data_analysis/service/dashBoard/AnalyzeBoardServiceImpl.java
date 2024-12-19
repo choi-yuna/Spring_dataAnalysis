@@ -2,6 +2,7 @@ package com.fas.dentistry_data_analysis.service.dashBoard;
 
 import com.fas.dentistry_data_analysis.config.StorageConfig;
 import com.fas.dentistry_data_analysis.service.FolderFileCacheManager;
+import com.fas.dentistry_data_analysis.service.Json.JSONService;
 import com.fas.dentistry_data_analysis.util.SFTPClient;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -32,7 +33,7 @@ public class AnalyzeBoardServiceImpl {
 //    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
 //    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
 
-    private final DataGropedService dataGropedService;
+    private final JSONService jsonService;
     private final TotalDataGropedService totalDataGropedService;
     private final ExcelService excelService;
     private final FolderFileCacheManager folderFileCacheManager;
@@ -42,8 +43,8 @@ public class AnalyzeBoardServiceImpl {
     private static final List<String> DISEASE_FOLDER_NAMES = Arrays.asList("골수염", "치주질환", "구강암","두개안면기형");
 
 
-    public AnalyzeBoardServiceImpl(DataGropedService dataGropedService, ExcelService excelService, TotalDataGropedService totalDataGropedService,FolderFileCacheManager folderFileCacheManager, StorageConfig storageConfig) {
-        this.dataGropedService = dataGropedService;
+    public AnalyzeBoardServiceImpl(JSONService jsonService, ExcelService excelService, TotalDataGropedService totalDataGropedService,FolderFileCacheManager folderFileCacheManager, StorageConfig storageConfig) {
+        this.jsonService = jsonService;
         this.excelService = excelService;
         this.totalDataGropedService = totalDataGropedService;
         this.folderFileCacheManager = folderFileCacheManager;
@@ -59,6 +60,9 @@ public class AnalyzeBoardServiceImpl {
         if (refresh && !refreshInProgress.compareAndSet(false, true)) {
             throw new IllegalStateException("Refresh is already in progress.");
         }
+
+
+        List<String> passIds = new ArrayList<>();
         List<Map<String, Object>> resultList = new ArrayList<>();
         List<Map<String, Object>> errorList = new ArrayList<>();
 
@@ -66,23 +70,28 @@ public class AnalyzeBoardServiceImpl {
         ChannelSftp channelSftp = null;
         Set<String> processedImageIds = new HashSet<>();  // 중복 처리용 전역 Set
 
-        if(refresh) deleteExistingExcelFiles();
+        if(refresh) {
+            jsonService.deleteExistingExcelFiles("C:/app/dentistry",".xlsx");
+            jsonService.deleteExistingExcelFiles("C:/app/id",".json");
+        }
 
         try {
             session = SFTPClient.createSession(SFTP_HOST, SFTP_USER, SFTP_PASSWORD, SFTP_PORT);
             channelSftp = SFTPClient.createSftpChannel(session);
 
             // 폴더 내 파일을 병렬로 처리
-            processFolderRecursively(channelSftp, folderPath, resultList, errorList, processedImageIds, refresh);
+            processFolderRecursively(channelSftp, folderPath, resultList, errorList, processedImageIds, refresh, passIds);
 
         } finally {
             if (refresh) {
+                jsonService.savePassIdsToJson(passIds,"C:/app/id");
                 refreshInProgress.set(false);
             }
             if (channelSftp != null) channelSftp.disconnect();
             if (session != null) session.disconnect();
             log.info("SFTP connection closed");
         }
+
         Map<String, Object> response = new HashMap<>();
 
         List<Map<String, Object>> errorData = new ArrayList<>();
@@ -122,7 +131,7 @@ public class AnalyzeBoardServiceImpl {
                                           List<Map<String, Object>> resultList,
                                           List<Map<String, Object>> errorList,
                                           Set<String> processedImageIds,
-                                          boolean refresh) throws Exception {
+                                          boolean refresh,List<String> passIds) throws Exception {
         List<ChannelSftp.LsEntry> files;
 
         try {
@@ -157,7 +166,7 @@ public class AnalyzeBoardServiceImpl {
                 }
             } else {
                 log.info("JSON result file already exists for folder: {}", jsonFilePath);
-                List<Map<String, Object>> existingResults = loadResultsFromJsonSftp(folderPath, channelSftp);
+                List<Map<String, Object>> existingResults = jsonService.loadResultsFromJsonSftp(folderPath, channelSftp);
                 resultList.addAll(existingResults);
                 return; // 추가 처리 건너뜁니다.
             }
@@ -182,7 +191,7 @@ public class AnalyzeBoardServiceImpl {
 
                 futures.add(CompletableFuture.runAsync(() -> {
                     try {
-                        processFile(channelSftp, folderPath, fileName, folderResultList, folderErrorList,processedImageIds, stopSubfolderSearch);
+                        processFile(channelSftp, folderPath, fileName, folderResultList, folderErrorList,processedImageIds, stopSubfolderSearch,passIds);
                     } catch (Exception e) {
                         log.error("Error processing file: {}", fileName, e);
                     }
@@ -199,11 +208,11 @@ public class AnalyzeBoardServiceImpl {
         // 특정 질환 폴더에 독립적으로 저장
         if (isExcelFileProcessed && targetDiseaseFolder != null) {
             log.info("Saving results independently to target disease folder: {}", targetDiseaseFolder);
-            saveResultsToJsonSftp(targetDiseaseFolder, folderResultList, channelSftp);
-            saveResultsToJsonSftp(targetDiseaseFolder, folderErrorList, channelSftp);// **독립된 리스트 저장**
+            jsonService.saveResultsToJsonSftp(targetDiseaseFolder, folderResultList, channelSftp);
+            jsonService.saveResultsToJsonSftp(targetDiseaseFolder, folderErrorList, channelSftp);// **독립된 리스트 저장**
         } else if (isExcelFileProcessed) {
-            saveResultsToJsonSftp(folderPath, folderResultList, channelSftp);
-            saveResultsToJsonSftp(folderPath, folderErrorList, channelSftp);
+            jsonService.saveResultsToJsonSftp(folderPath, folderResultList, channelSftp);
+            jsonService.saveResultsToJsonSftp(folderPath, folderErrorList, channelSftp);
         }
         resultList.addAll(folderResultList);
         errorList.addAll(folderErrorList);
@@ -213,74 +222,13 @@ public class AnalyzeBoardServiceImpl {
             for (ChannelSftp.LsEntry entry : files) {
                 if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
                     String subFolderPath = folderPath + "/" + entry.getFilename();
-                    processFolderRecursively(channelSftp, subFolderPath, resultList, errorList,processedImageIds, refresh);
+                    processFolderRecursively(channelSftp, subFolderPath, resultList, errorList,processedImageIds, refresh,passIds);
                 }
             }
         }
 
         executorService.shutdown();
     }
-
-    private void deleteExistingExcelFiles() {
-        // 저장 디렉토리
-        String storagePath = storageConfig.getStoragePath();
-        File dentistryDir = new File("C:/app/dentistry");
-
-        if (!dentistryDir.exists()) {
-            log.info("Directory does not exist: {}", dentistryDir.getAbsolutePath());
-            return;
-        }
-
-        // 질환 및 기관에 해당하는 파일만 삭제
-        File[] filesToDelete = dentistryDir.listFiles((dir, name) ->
-                 name.endsWith(".xlsx")
-        );
-
-        if (filesToDelete != null) {
-            for (File file : filesToDelete) {
-                if (file.delete()) {
-                    log.info("Deleted existing file: {}", file.getName());
-                } else {
-                    log.warn("Failed to delete file: {}", file.getName());
-                }
-            }
-        }
-    }
-
-
-    private void saveExcelToLocal(ChannelSftp channelSftp, String folderPath, String fileName, String diseaseClass, String institutionId, String storagePath) {
-        try {
-            // 저장할 디렉터리 설정
-            File dentistryDir = new File("C:/app/dentistry");
-            if (!dentistryDir.exists()) {
-                dentistryDir.mkdirs(); // 디렉터리가 없으면 생성
-            }
-            String uuid = UUID.randomUUID().toString();
-            // 파일 이름에 질환과 기관 정보를 추가
-            String newFileName = String.format("%s_%s_%s_%s", diseaseClass, institutionId, uuid,".xlsx");
-            File localFile = new File(dentistryDir, newFileName);
-
-            // 파일이 이미 존재하면 다시 다운로드하지 않음
-            if (!localFile.exists()) {
-                try (InputStream inputStream = SFTPClient.readFile(channelSftp, folderPath, fileName);
-                     OutputStream outputStream = new FileOutputStream(localFile)) {
-                    byte[] buffer = new byte[1024];
-                    int bytesRead;
-                    while ((bytesRead = inputStream.read(buffer)) != -1) {
-                        outputStream.write(buffer, 0, bytesRead);
-                    }
-                }
-                log.info("Excel file saved to: {}", localFile.getAbsolutePath());
-            } else {
-                log.info("Excel file already exists at: {}", localFile.getAbsolutePath());
-            }
-        } catch (IOException | SftpException e) {
-            log.error("Error saving Excel file locally: {}", fileName, e);
-        }
-    }
-
-
-
 
     private String getTargetDiseaseFolder(String folderPath) {
         for (String disease : DISEASE_FOLDER_NAMES) {
@@ -303,38 +251,6 @@ public class AnalyzeBoardServiceImpl {
             return objectMapper.readValue(inputStream, new TypeReference<List<Map<String, Object>>>() {});
         }
     }
-
-
-    private void saveResultsToJsonSftp(String folderPath, List<Map<String, Object>> newResults, ChannelSftp channelSftp) throws IOException, SftpException {
-        // 기존 JSON 데이터 로드
-        List<Map<String, Object>> existingResults;
-        try {
-            existingResults = loadResultsFromJsonSftp(folderPath, channelSftp);
-        } catch (Exception e) {
-            log.warn("No existing JSON file found or error loading JSON from folder: {}. Initializing with empty list.", folderPath);
-            existingResults = new ArrayList<>();
-        }
-
-        // 새로운 결과 병합
-        List<Map<String, Object>> mergedResults = new ArrayList<>(existingResults);
-        mergedResults.addAll(newResults);
-
-        // ObjectMapper를 사용하여 JSON 형식으로 변환
-        ObjectMapper objectMapper = new ObjectMapper();
-        String jsonContent = objectMapper.writeValueAsString(mergedResults);
-
-        // 문자열 데이터를 InputStream으로 변환
-        InputStream inputStream = new ByteArrayInputStream(jsonContent.getBytes());
-
-        // SFTP 서버에 저장 (폴더 경로 + 파일 이름 지정)
-        String sftpFilePath = folderPath + "/analysis_result.json";
-
-        SFTPClient.uploadFile(channelSftp, folderPath, "analysis_result.json", inputStream);
-
-        log.info("Results successfully merged and saved to SFTP at: {}", sftpFilePath);
-    }
-
-
 
     private Boolean processJsonInputStream(InputStream jsonInputStream) throws IOException {
         ObjectMapper objectMapper = new ObjectMapper();
@@ -372,7 +288,7 @@ public class AnalyzeBoardServiceImpl {
     //질환별 폴더 확인 로직
     private void processFile(ChannelSftp channelSftp, String folderPath, String fileName,
                              List<Map<String, Object>> resultList, List<Map<String, Object>> errorList,Set<String> processedImageIds,
-                             AtomicBoolean stopSubfolderSearch) throws Exception {
+                             AtomicBoolean stopSubfolderSearch, List<String> passIds) throws Exception {
 
         // JSON 파일에서 DISEASE_CLASS와 INSTITUTION_ID 추출
         String diseaseClass = null;
@@ -400,7 +316,7 @@ public class AnalyzeBoardServiceImpl {
             institutionId = "단국대학교";
         } else if (folderPath.contains("국립암센터")) {
             institutionId = "국립암센터";
-        } else if (folderPath.contains("SNU")) {
+        } else if (folderPath.contains("서울대")) {
             institutionId = "서울대학교";
         } else if (folderPath.contains("원광대")) {
             institutionId = "원광대학교";
@@ -416,7 +332,7 @@ public class AnalyzeBoardServiceImpl {
             return;  // 필수 데이터가 없으면 중단
         }
         String storagePath = storageConfig.getStoragePath();
-        saveExcelToLocal(channelSftp, folderPath, fileName, diseaseClass, institutionId,storagePath);
+        jsonService.saveExcelToLocal(channelSftp, folderPath, fileName, diseaseClass, institutionId,storagePath);
 
         // 엑셀 파일 처리 (엑셀 파일에는 DISEASE_CLASS와 INSTITUTION_ID가 없다)
         InputStream inputStream = SFTPClient.readFile(channelSftp, folderPath, fileName);
@@ -508,10 +424,14 @@ public class AnalyzeBoardServiceImpl {
             incrementStatus(resultList, institutionId, diseaseClass, "대조군", "라벨링등록건수", subFolderNames.size());
             incrementStatus(resultList, institutionId, diseaseClass, "대조군", "메타", subFolderNames.size());
 
-        // 라벨링 PASS 건수 계산 (하위 폴더 이름을 IMAGE_ID와 비교)
+            // 라벨링 PASS 건수 계산 (하위 폴더 이름을 IMAGE_ID와 비교)
             for (String subFolderName : subFolderNames) {
-                boolean isMatched = imageIdsFromExcel.stream().anyMatch(imageId -> subFolderName.contains(imageId));
-                if (isMatched) {
+                Optional<String> matchedImageId = imageIdsFromExcel.stream()
+                        .filter(imageId -> subFolderName.contains(imageId))
+                        .findFirst();
+
+                if (matchedImageId.isPresent()) {
+                    passIds.add(matchedImageId.get()); // Pass된 ID 저장
                     incrementStatus(resultList, institutionId, diseaseClass, "대조군", "drawing", null);
                     incrementStatus(resultList, institutionId, diseaseClass, "대조군", "라벨링pass건수", null);
                 }
@@ -580,6 +500,7 @@ public class AnalyzeBoardServiceImpl {
                 }
                 if(jsonExists) {
                     if ((dcmExists && iniExists && alveExists)) {
+                        passIds.add(imageId);
                         incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);
                         //processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
                         stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
@@ -602,6 +523,7 @@ public class AnalyzeBoardServiceImpl {
                         // JSON 데이터 처리
                         labellingExists = processJsonInputStream(jsonInputStream);
                         if(labellingExists && dcmExists){
+                            passIds.add(imageId);
                         incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);}
                         else{
                             errorDataStatus(errorList, institutionId, diseaseClass, imageId,jsonExists,dcmExists,false,false);
@@ -628,6 +550,7 @@ public class AnalyzeBoardServiceImpl {
                 if (jsonExists && dcmExists) {
                     incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링등록건수",null);
                     if ((labellingExists && iniExists)) {
+                        passIds.add(imageId);
                         incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);
                         //processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
                         stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
@@ -645,7 +568,6 @@ public class AnalyzeBoardServiceImpl {
         }
 
     }
-
 
     private boolean checkFileExistsInSFTPForImageId(ChannelSftp channelSftp, String folderPath, String imageId) throws SftpException {
         // 주어진 경로에 대한 캐시를 초기화하거나 가져옴
