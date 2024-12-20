@@ -4,6 +4,8 @@ import com.fas.dentistry_data_analysis.util.ConditionMatcher;
 import com.fas.dentistry_data_analysis.util.ExcelUtils;
 import com.fas.dentistry_data_analysis.util.HeaderMapping;
 import com.fas.dentistry_data_analysis.util.ValueMapping;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
@@ -13,10 +15,7 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
@@ -24,6 +23,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.fas.dentistry_data_analysis.util.ExcelUtils.getCellValueAsString;
 
@@ -235,6 +235,19 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
 
         return responseList;
     }
+    public Set<String> loadPassIdsFromJson(String filePath) {
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            // JSON 파일에서 단순 리스트로 데이터 읽기
+            List<String> idList = objectMapper.readValue(new File(filePath), new TypeReference<List<String>>() {});
+            return new HashSet<>(idList); // Set으로 변환하여 반환
+        } catch (IOException e) {
+            log.error("Pass된 ID를 JSON에서 읽는 중 오류가 발생했습니다: {}", filePath, e);
+            return Collections.emptySet(); // 실패 시 빈 Set 반환
+        }
+    }
+
+
 
     @Override
     public List<Map<String, Map<String, String>>> analyzeFolderData(String folderPath, String diseaseClass, int institutionId)
@@ -248,6 +261,9 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         if (!folder.exists() || !folder.isDirectory()) {
             throw new IllegalArgumentException("지정된 경로가 유효하지 않거나 폴더가 아닙니다: " + folderPath);
         }
+
+        Set<String> passIdsSet = new HashSet<>(loadPassIdsFromJson("C:/app/id/pass_ids.json"));
+        Set<String> IdSet = new HashSet<>();
 
         // 이미 처리된 파일 추적용 Set
         Set<String> processedFiles = new HashSet<>();
@@ -268,7 +284,7 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
 
             // 각 파일을 처리하는 작업을 병렬로 실행
             futureResults.add(executor.submit(() ->
-                    fileProcessor.processFile(file, diseaseClass, institutionId)
+                    fileProcessor.processServerFile(file, diseaseClass, institutionId,passIdsSet,IdSet)
             ));
         }
 
