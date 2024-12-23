@@ -4,6 +4,7 @@ package com.fas.dentistry_data_analysis.service.Json;
 import com.fas.dentistry_data_analysis.config.StorageConfig;
 import com.fas.dentistry_data_analysis.util.SFTPClient;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.SftpException;
@@ -143,5 +144,39 @@ public class JSONService {
             }
         }
     }
+
+
+    public void saveJsonToLocal(String savePath, String fileName, JsonNode newJsonData) {
+        try {
+            // 저장 디렉토리 생성
+            File saveDir = new File(savePath);
+            if (!saveDir.exists()) {
+                saveDir.mkdirs(); // 디렉터리가 없으면 생성
+            }
+
+            // 파일 경로 생성
+            File jsonFile = new File(saveDir, fileName);
+            ObjectMapper objectMapper = new ObjectMapper();
+
+            // 기존 데이터 로드
+            List<JsonNode> existingData = new ArrayList<>();
+            if (jsonFile.exists()) {
+                try (FileInputStream fis = new FileInputStream(jsonFile)) {
+                    existingData = objectMapper.readValue(fis, new TypeReference<List<JsonNode>>() {});
+                } catch (Exception e) {
+                    log.warn("기존 JSON 파일을 로드하는 중 오류가 발생했습니다. 새로 생성합니다: {}", jsonFile.getAbsolutePath(), e);
+                }
+            }
+
+            // 새로운 데이터 추가
+            existingData.add(newJsonData);
+
+            // 병합된 데이터를 다시 파일에 저장
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(jsonFile, existingData);
+        } catch (IOException e) {
+            log.error("JSON 데이터를 로컬에 저장하는 중 오류가 발생했습니다.", e);
+        }
+    }
+
 
 }

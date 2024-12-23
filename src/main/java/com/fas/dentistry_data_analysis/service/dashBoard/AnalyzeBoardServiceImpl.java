@@ -73,6 +73,7 @@ public class AnalyzeBoardServiceImpl {
         if(refresh) {
             jsonService.deleteExistingExcelFiles("C:/app/dentistry",".xlsx");
             jsonService.deleteExistingExcelFiles("C:/app/id",".json");
+            jsonService.deleteExistingExcelFiles("C:/app/disease_json", ".json"); // JSON 저장 폴더 초기화
         }
 
         try {
@@ -318,7 +319,7 @@ public class AnalyzeBoardServiceImpl {
             institutionId = "국립암센터";
         } else if (folderPath.contains("SNU")) {
             institutionId = "서울대학교";
-        } else if (folderPath.contains("WKU")) {
+        } else if (folderPath.contains("원광대")) {
             institutionId = "원광대학교";
         } else if (folderPath.contains("조선대")) {
             institutionId = "조선대학교";
@@ -501,6 +502,7 @@ public class AnalyzeBoardServiceImpl {
                 if(jsonExists) {
                     if ((dcmExists && iniExists && alveExists)) {
                         passIds.add(imageId);
+                        processJsonFile(channelSftp, folderPath,imageId,institutionId,diseaseClass);
                         incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);
                         //processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
                         stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
@@ -524,6 +526,7 @@ public class AnalyzeBoardServiceImpl {
                         labellingExists = processJsonInputStream(jsonInputStream);
                         if(labellingExists && dcmExists){
                             passIds.add(imageId);
+                            processJsonFile(channelSftp, folderPath,imageId,institutionId,diseaseClass);
                         incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);}
                         else{
                             errorDataStatus(errorList, institutionId, diseaseClass, imageId,jsonExists,dcmExists,false,false);
@@ -551,6 +554,7 @@ public class AnalyzeBoardServiceImpl {
                     incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링등록건수",null);
                     if ((labellingExists && iniExists)) {
                         passIds.add(imageId);
+                        processJsonFile(channelSftp, folderPath,imageId,institutionId,diseaseClass);
                         incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);
                         //processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
                         stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
@@ -675,14 +679,11 @@ public class AnalyzeBoardServiceImpl {
     /**
      *JSON에서 검수 값 읽어오기
      */
-    private void processJsonFile(ChannelSftp channelSftp, String folderPath, String imageId, List<Map<String, Object>> resultList, String institutionId, String diseaseClass) throws Exception {
+    private void processJsonFile(ChannelSftp channelSftp, String folderPath, String imageId, String institutionId, String diseaseClass) throws Exception {
 
         // JSON 파일 경로 설정
         String jsonFilePath = folderPath + (folderPath.contains("치주질환") ? "/Labelling/meta/" : "/Labelling/");
-//        String labelingKey = folderPath.contains("치주질환") ? "Labeling_Info" : "Labeling_info";
-//        String firstCheckKey = folderPath.contains("치주질환") ? "First_Check_Info" : "First_Check_info";
         String secondCheckKey = folderPath.contains("치주질환") ? "Second_Check_Info" : "Second_Check_info";
-
 
         try (InputStream jsonFileStream = SFTPClient.readFile(channelSftp, jsonFilePath, imageId + ".json")) {
 
@@ -690,29 +691,17 @@ public class AnalyzeBoardServiceImpl {
             ObjectMapper objectMapper = new ObjectMapper();
             JsonNode rootNode = objectMapper.readTree(jsonFileStream);
 
+                // JSON 내용을 로컬에 저장
+                String savePath = "C:/app/disease_json/"; // 로컬 저장 경로
+                String fileName = String.format("%s_%s.json", diseaseClass, institutionId);
 
-            // 상태 추출
-//            boolean labelingStatus = getJsonStatus(rootNode, labelingKey) == 2;
-//            boolean firstCheckStatus = getJsonStatus(rootNode, firstCheckKey) == 2;
-            boolean secondCheckStatus = getJsonStatus(rootNode, secondCheckKey) == 2;
-
-
-            // 상태가 2인 경우에만 처리
-            //라벨링 건수 로직
-//            if (labelingStatus) {
-//                incrementStatus(resultList, institutionId, diseaseClass, imageId, "라벨링건수");
-//            }
-//            if (firstCheckStatus) {
-//                incrementStatus(resultList, institutionId, diseaseClass, imageId, "1차검수");
-//            }
-
-            if (secondCheckStatus) {
-                incrementStatus(resultList, institutionId, diseaseClass, null, "2차검수",0);  // 2 차검수 증가값 0으로 고정
-            }
+                // JSON 데이터를 로컬에 저장
+                jsonService.saveJsonToLocal(savePath, fileName, rootNode);
         } catch (Exception e) {
             log.error("Error while processing JSON file for Image ID: {}", imageId, e);
         }
     }
+
 
 
     // 값 저장하는 함수

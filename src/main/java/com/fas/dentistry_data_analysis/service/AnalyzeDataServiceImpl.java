@@ -34,12 +34,14 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
     private final FileStorageService fileStorageService;
     private final ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
     private final FileProcessor fileProcessor;
+    private final JsonFileProcessor jsonFileProcessor;
 
 
     @Autowired
-    public AnalyzeDataServiceImpl(FileStorageService fileStorageService, FileProcessor fileProcessor) {
+    public AnalyzeDataServiceImpl(FileStorageService fileStorageService, FileProcessor fileProcessor, JsonFileProcessor jsonFileProcessor) {
         this.fileStorageService = fileStorageService;
         this.fileProcessor = fileProcessor;
+        this.jsonFileProcessor = jsonFileProcessor;
     }
 
     @Override
@@ -297,6 +299,57 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         executor.shutdown();
         return combinedData;
     }
+
+    @Override
+    public List<Map<String, Map<String, String>>> analyzeJsonData(String folderPath, String diseaseClass, int institutionId) throws IOException, ExecutionException, InterruptedException {
+        if (folderPath == null || folderPath.isEmpty()) {
+            throw new IllegalArgumentException("폴더 경로가 비어있거나 null입니다.");
+        }
+
+        // 폴더가 유효한지 확인
+        File folder = new File(folderPath);
+        if (!folder.exists() || !folder.isDirectory()) {
+            throw new IllegalArgumentException("지정된 경로가 유효하지 않거나 폴더가 아닙니다: " + folderPath);
+        }
+
+        // 이미 처리된 파일 추적용 Set
+        Set<String> processedFiles = new HashSet<>();
+
+        // 폴더 내의 모든 파일을 병렬로 처리
+        ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+        List<Future<List<Map<String, Map<String, String>>>>> futureResults = new ArrayList<>();
+        File[] files = folder.listFiles();
+        if (files == null || files.length == 0) {
+            throw new IOException("지정된 폴더에 파일이 없습니다.");
+        }
+
+        for (File file : files) {
+            // 이미 처리된 파일은 건너뜀
+            if (!file.isFile() || !processedFiles.add(file.getName())) {
+                continue;
+            }
+
+            // 각 파일을 처리하는 작업을 병렬로 실행
+            futureResults.add(executor.submit(() ->
+                    jsonFileProcessor.processJsonFile(file, diseaseClass, institutionId)
+            ));
+        }
+
+        // 병렬 처리 결과를 결합
+        List<Map<String, Map<String, String>>> combinedData = new ArrayList<>();
+        for (Future<List<Map<String, Map<String, String>>>> future : futureResults) {
+            combinedData.addAll(future.get()); // 결과를 합침
+        }
+
+        executor.shutdown();
+        return combinedData;
+    }
+
+
+
+
+
+
 
 
     @Override

@@ -20,7 +20,7 @@ import java.util.concurrent.ExecutionException;
 public class ExcelAnalyzeController {
 
  private final String folderPath = "/치의학데이터 과제 데이터 수집/내부 데이터/";
-//private final String folderPath = "/내부 데이터/";
+//private final String folderPath = "/내부 데이터/원광대/치주질환";
 
 
         private final AnalyzeDataService analyzeDataService;
@@ -60,13 +60,18 @@ public class ExcelAnalyzeController {
             int institutionId = request.getInstitutionId();
             log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", fileIds, diseaseClass, institutionId);
 
-            if (fileIds != null && fileIds.length > 0) { // null 체크 추가
-                List<Map<String, Map<String, String>>>  dataList = analyzeDataService.analyzeData(fileIds, diseaseClass, institutionId);
+            if (fileIds != null && fileIds.length > 0 && !Arrays.asList(fileIds).contains("json")) { // null 및 "json" 포함 여부 체크
+                List<Map<String, Map<String, String>>> dataList = analyzeDataService.analyzeData(fileIds, diseaseClass, institutionId);
                 return ResponseEntity.ok(Map.of("data", dataList));
-            } else {
-                List<Map<String, Map<String, String>>>  dataList = analyzeDataService.analyzeFolderData("C:/app/dentistry", diseaseClass, institutionId);
+            } else if (fileIds != null && fileIds.length == 1 && "json".equals(fileIds[0])) { // fileIds가 "json" 문자열 하나만 포함하는 경우 처리
+                List<Map<String, Map<String, String>>> dataList = analyzeDataService.analyzeJsonData("C:/app/disease_json", diseaseClass, institutionId);
+                return ResponseEntity.ok(Map.of("data", dataList));
+            } else { // fileIds가 null이거나 비어 있는 경우 처리
+                List<Map<String, Map<String, String>>> dataList = analyzeDataService.analyzeFolderData("C:/app/dentistry", diseaseClass, institutionId);
                 return ResponseEntity.ok(Map.of("data", dataList));
             }
+
+
         } catch (IOException e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("데이터 분석 중 오류가 발생했습니다.");
