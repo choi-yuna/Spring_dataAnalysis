@@ -241,18 +241,6 @@ public class AnalyzeBoardServiceImpl {
     }
 
 
-
-    private List<Map<String, Object>> loadResultsFromJsonSftp(String folderPath, ChannelSftp channelSftp) throws IOException, SftpException {
-        // JSON 파일 경로
-        String jsonFilePath = folderPath + "/analysis_result.json";
-
-        // JSON 파일 로드
-        try (InputStream inputStream = SFTPClient.readFile(channelSftp, folderPath, "analysis_result.json")) {
-            ObjectMapper objectMapper = new ObjectMapper();
-            return objectMapper.readValue(inputStream, new TypeReference<List<Map<String, Object>>>() {});
-        }
-    }
-
     private Boolean processJsonInputStream(InputStream jsonInputStream) throws IOException {
         ObjectMapper objectMapper = new ObjectMapper();
         JsonNode rootNode = objectMapper.readTree(jsonInputStream);
@@ -311,13 +299,13 @@ public class AnalyzeBoardServiceImpl {
 
         if (folderPath.contains("고려대")) {
             institutionId = "고려대학교";
-        } else if (folderPath.contains("BRM")) {
+        } else if (folderPath.contains("보라매")) {
             institutionId = "보라매병원";
         } else if (folderPath.contains("단국대")) {
             institutionId = "단국대학교";
         } else if (folderPath.contains("국립암센터")) {
             institutionId = "국립암센터";
-        } else if (folderPath.contains("SNU")) {
+        } else if (folderPath.contains("서울대")) {
             institutionId = "서울대학교";
         } else if (folderPath.contains("원광대")) {
             institutionId = "원광대학교";

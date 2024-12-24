@@ -129,16 +129,6 @@ public class JsonFileProcessorServiceImpl implements JsonFileProcessor {
         return null;
     }
 
-
-    // 파일 이름에서 질환명을 추출하는 메소드
-    private String inferDiseaseClassFromFileName(String fileName) {
-        if (fileName.contains("치주질환")) return "치주질환";
-        if (fileName.contains("골수염")) return "골수염";
-        if (fileName.contains("구강암")) return "구강암";
-        if (fileName.contains("두개안면")) return "두개안면";
-        return null; // 질환명을 추출할 수 없으면 null 반환
-    }
-
     @Override
     public List<Map<String, Map<String, String>>> processJsonFile(File file, String diseaseClass, int institutionId) throws IOException {
         String fileName = file.getName().toLowerCase();
