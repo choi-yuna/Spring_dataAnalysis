@@ -698,7 +698,7 @@ public class TotalDataGropedService {
         return diseaseData;
     }
 
-    public List<Map<String, Object>> groupErrorData(List<Map<String, Object>> resultList) {
+    public List<Map<String, Object>> groupErrorData(List<Map<String, Object>> resultList, Set<String> passIdsSet) {
         // 결과 데이터를 그룹화할 맵 초기화 (disease + hospital을 키로 사용)
         Map<String, List<Map<String, Object>>> groupedData = new LinkedHashMap<>();
 
@@ -718,6 +718,11 @@ public class TotalDataGropedService {
 
             // 필수 값이 없으면 건너뜀
             if (disease == null || hospital == null || fileId == null) {
+                continue;
+            }
+
+            // passIdsSet에 포함된 fileId는 건너뜀
+            if (passIdsSet.contains(fileId)) {
                 continue;
             }
 

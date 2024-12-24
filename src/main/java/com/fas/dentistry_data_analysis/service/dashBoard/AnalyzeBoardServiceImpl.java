@@ -23,15 +23,15 @@ import java.util.stream.Collectors;
 @Service
 public class AnalyzeBoardServiceImpl {
     //원광대 서버 정보
-//    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
-//    private static final int SFTP_PORT = 2024;  // SFTP 포트
-//    private static final String SFTP_USER = "master01";  // 사용자 계정
-//    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
+    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
+    private static final int SFTP_PORT = 2024;  // SFTP 포트
+    private static final String SFTP_USER = "master01";  // 사용자 계정
+    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
     // SFTP 서버 정보
-    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
-    private static final int SFTP_PORT = 22;  // SFTP 포트
-    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
-    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
+//    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
+//    private static final int SFTP_PORT = 22;  // SFTP 포트
+//    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
+//    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
 
     private final JSONService jsonService;
     private final TotalDataGropedService totalDataGropedService;
@@ -96,7 +96,8 @@ public class AnalyzeBoardServiceImpl {
         Map<String, Object> response = new HashMap<>();
 
         List<Map<String, Object>> errorData = new ArrayList<>();
-        errorData.addAll(totalDataGropedService.groupErrorData(resultList));  // 그룹화된 데이터 추가
+        Set<String> passIdsSet = new HashSet<>(jsonService.loadPassIdsFromJson("C:/app/id/pass_ids.json"));
+        errorData.addAll(totalDataGropedService.groupErrorData(resultList,passIdsSet));  // 그룹화된 데이터 추가
         response.put("errorData", errorData);
 
         // 질환별 데이터 그룹화

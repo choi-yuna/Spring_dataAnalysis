@@ -12,10 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 @Slf4j
@@ -144,6 +141,18 @@ public class JSONService {
             }
         }
     }
+    public Set<String> loadPassIdsFromJson(String filePath) {
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            // JSON 파일에서 단순 리스트로 데이터 읽기
+            List<String> idList = objectMapper.readValue(new File(filePath), new TypeReference<List<String>>() {});
+            return new HashSet<>(idList); // Set으로 변환하여 반환
+        } catch (IOException e) {
+            log.error("Pass된 ID를 JSON에서 읽는 중 오류가 발생했습니다: {}", filePath, e);
+            return Collections.emptySet(); // 실패 시 빈 Set 반환
+        }
+    }
+
 
 
     public void saveJsonToLocal(String savePath, String fileName, JsonNode newJsonData) {
