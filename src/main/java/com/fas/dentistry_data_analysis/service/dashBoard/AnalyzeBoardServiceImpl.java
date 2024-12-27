@@ -24,15 +24,15 @@ import java.util.stream.Collectors;
 @Service
 public class AnalyzeBoardServiceImpl {
     //원광대 서버 정보
-//    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
-//    private static final int SFTP_PORT = 2024;  // SFTP 포트
-//    private static final String SFTP_USER = "master01";  // 사용자 계정
-//    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
+    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
+    private static final int SFTP_PORT = 2024;  // SFTP 포트
+    private static final String SFTP_USER = "master01";  // 사용자 계정
+    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
     // SFTP 서버 정보
-    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
-    private static final int SFTP_PORT = 22;  // SFTP 포트
-    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
-    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
+//    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
+//    private static final int SFTP_PORT = 22;  // SFTP 포트
+//    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
+//    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
 
     private final JSONService jsonService;
     private final TotalDataGropedService totalDataGropedService;
@@ -366,13 +366,13 @@ public class AnalyzeBoardServiceImpl {
 
         if (folderPath.contains("고려대")) {
             institutionId = "고려대학교";
-        } else if (folderPath.contains("BRM")) {
+        } else if (folderPath.contains("보라매")) {
             institutionId = "보라매병원";
         } else if (folderPath.contains("단국대")) {
             institutionId = "단국대학교";
         } else if (folderPath.contains("국립암센터")) {
             institutionId = "국립암센터";
-        } else if (folderPath.contains("SNU")) {
+        } else if (folderPath.contains("서울대")) {
             institutionId = "서울대학교";
         } else if (folderPath.contains("원광대")) {
             institutionId = "원광대학교";
