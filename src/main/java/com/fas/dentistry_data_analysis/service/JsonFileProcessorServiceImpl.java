@@ -102,6 +102,7 @@ public class JsonFileProcessorServiceImpl implements JsonFileProcessor {
      * @param key 찾을 키
      * @return 값 (없으면 null)
      */
+
     private JsonNode findValueInSections(JsonNode recordNode, String key) {
         // JSON 최상위에서 값 검색
         if (recordNode.has(key)) {
