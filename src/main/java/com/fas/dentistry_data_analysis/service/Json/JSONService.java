@@ -4,6 +4,7 @@ package com.fas.dentistry_data_analysis.service.Json;
 import com.fas.dentistry_data_analysis.config.StorageConfig;
 import com.fas.dentistry_data_analysis.util.SFTPClient;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.SftpException;
@@ -11,10 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 @Slf4j
@@ -26,16 +24,13 @@ public class JSONService {
         this.storageConfig = storageConfig;
     }
 
-    public void saveExcelToLocal(ChannelSftp channelSftp, String folderPath, String fileName, String diseaseClass, String institutionId, String storagePath) {
+    public void saveExcelToLocal(ChannelSftp channelSftp, String folderPath, String fileName,String newFileName) {
         try {
             // 저장할 디렉터리 설정
             File dentistryDir = new File("C:/app/dentistry");
             if (!dentistryDir.exists()) {
                 dentistryDir.mkdirs(); // 디렉터리가 없으면 생성
             }
-            String uuid = UUID.randomUUID().toString();
-            // 파일 이름에 질환과 기관 정보를 추가
-            String newFileName = String.format("%s_%s_%s_%s", diseaseClass, institutionId, uuid,".xlsx");
             File localFile = new File(dentistryDir, newFileName);
 
             // 파일이 이미 존재하면 다시 다운로드하지 않음
@@ -143,5 +138,93 @@ public class JSONService {
             }
         }
     }
+    public Set<String> loadPassIdsFromJson(String filePath) {
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            // JSON 파일에서 단순 리스트로 데이터 읽기
+            List<String> idList = objectMapper.readValue(new File(filePath), new TypeReference<List<String>>() {});
+            return new HashSet<>(idList); // Set으로 변환하여 반환
+        } catch (IOException e) {
+            log.error("Pass된 ID를 JSON에서 읽는 중 오류가 발생했습니다: {}", filePath, e);
+            return Collections.emptySet(); // 실패 시 빈 Set 반환
+        }
+    }
+
+
+
+    public void saveJsonToLocal(String savePath, String fileName, JsonNode newJsonData) {
+        try {
+            // 저장 디렉토리 생성
+            File saveDir = new File(savePath);
+            if (!saveDir.exists()) {
+                saveDir.mkdirs(); // 디렉터리가 없으면 생성
+            }
+
+            // 파일 경로 생성
+            File jsonFile = new File(saveDir, fileName);
+            ObjectMapper objectMapper = new ObjectMapper();
+
+            // 기존 데이터 로드
+            List<JsonNode> existingData = new ArrayList<>();
+            if (jsonFile.exists()) {
+                try (FileInputStream fis = new FileInputStream(jsonFile)) {
+                    existingData = objectMapper.readValue(fis, new TypeReference<List<JsonNode>>() {});
+                } catch (Exception e) {
+                    log.warn("기존 JSON 파일을 로드하는 중 오류가 발생했습니다. 새로 생성합니다: {}", jsonFile.getAbsolutePath(), e);
+                }
+            }
+
+            // 새로운 데이터 추가
+            existingData.add(newJsonData);
+
+            // 병합된 데이터를 다시 파일에 저장
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(jsonFile, existingData);
+        } catch (IOException e) {
+            log.error("JSON 데이터를 로컬에 저장하는 중 오류가 발생했습니다.", e);
+        }
+    }
+
+    public void saveDuplicateJsonInfoToLocal(Map<String, Map<String, List<String>>> duplicateJsonFiles, String savePath) {
+        // 저장 경로가 없으면 생성
+        File directory = new File(savePath);
+        if (!directory.exists()) {
+            if (directory.mkdirs()) {
+                log.info("Created directory at path: {}", savePath);
+            } else {
+                log.error("Failed to create directory at path: {}", savePath);
+                return; // 디렉토리 생성 실패 시 종료
+            }
+        }
+
+        for (Map.Entry<String, Map<String, List<String>>> institutionEntry : duplicateJsonFiles.entrySet()) {
+            String institutionId = institutionEntry.getKey();
+            Map<String, List<String>> diseaseData = institutionEntry.getValue();
+
+            for (Map.Entry<String, List<String>> diseaseEntry : diseaseData.entrySet()) {
+                String diseaseClass = diseaseEntry.getKey();
+                List<String> duplicates = diseaseEntry.getValue();
+
+                Map<String, Object> jsonContent = new HashMap<>();
+                jsonContent.put("institutionId", institutionId);
+                jsonContent.put("diseaseClass", diseaseClass);
+                jsonContent.put("duplicateCount", duplicates.size());
+                jsonContent.put("duplicateFiles", duplicates);
+
+                // 파일 이름 지정
+                String fileName = String.format("%s_%s.json", institutionId, diseaseClass);
+
+                // 로컬 경로에 저장
+                try (FileWriter fileWriter = new FileWriter(new File(directory, fileName))) {
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    objectMapper.writerWithDefaultPrettyPrinter().writeValue(fileWriter, jsonContent);
+                    log.info("Saved duplicate JSON info to file: {}", fileName);
+                } catch (IOException e) {
+                    log.error("Error saving duplicate JSON info to file: {}", fileName, e);
+                }
+            }
+        }
+    }
+
+
 
 }
