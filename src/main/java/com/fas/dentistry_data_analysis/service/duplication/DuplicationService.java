@@ -361,11 +361,12 @@ public class DuplicationService {
         // 오류 ID를 저장할 리스트
         List<String> mismatchedIds = new ArrayList<>();
 
-        // JSON 데이터를 Identifier 기준으로 Map에 저장
+        // JSON 데이터를 Identifier 기준으로 Map에 저장 (중복 키 처리)
         Map<String, Map<String, String>> jsonDataById = jsonData.stream()
                 .collect(Collectors.toMap(
                         data -> data.get("Identifier"), // Identifier를 Key로 사용
-                        data -> data
+                        data -> data,                  // Value로 Map 저장
+                        (existing, replacement) -> existing // 중복 발생 시 기존 값 유지
                 ));
 
         for (Map<String, String> excelRow : excelData) {
@@ -375,6 +376,7 @@ public class DuplicationService {
             Map<String, String> jsonRow = jsonDataById.get(id);
 
             if (jsonRow == null) {
+                log.warn("JSON 데이터에서 Identifier를 찾을 수 없습니다: {}", id);
                 continue; // JSON 데이터에 해당 ID가 없는 경우 무시
             }
 
@@ -388,6 +390,8 @@ public class DuplicationService {
                 String jsonValue = jsonRow.get(field);
 
                 if (!Objects.equals(excelValue, jsonValue)) {
+                    log.warn("Mismatch detected for ID {}: Field {} (Excel: {}, JSON: {})",
+                            id, field, excelValue, jsonValue);
                     hasMismatch = true;
                 }
             }
@@ -400,6 +404,7 @@ public class DuplicationService {
 
         return mismatchedIds; // 오류 Identifier 리스트 반환
     }
+
 
     private JsonNode findValueInSections(JsonNode recordNode, String key) {
         // 최상위에서 값 검색
