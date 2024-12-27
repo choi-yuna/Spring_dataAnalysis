@@ -7,6 +7,7 @@ import com.fas.dentistry_data_analysis.util.SFTPClient;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.SftpException;
@@ -387,7 +388,10 @@ public class AnalyzeBoardServiceImpl {
             return;  // 필수 데이터가 없으면 중단
         }
         String storagePath = storageConfig.getStoragePath();
-        jsonService.saveExcelToLocal(channelSftp, folderPath, fileName, diseaseClass, institutionId,storagePath);
+        String uuid = UUID.randomUUID().toString();
+        // 파일 이름에 질환과 기관 정보를 추가
+        String newFileName = String.format("%s_%s_%s_%s", diseaseClass, institutionId, uuid,".xlsx");
+        jsonService.saveExcelToLocal(channelSftp, folderPath, fileName,newFileName);
 
         // 엑셀 파일 처리 (엑셀 파일에는 DISEASE_CLASS와 INSTITUTION_ID가 없다)
         InputStream inputStream = SFTPClient.readFile(channelSftp, folderPath, fileName);
@@ -555,7 +559,7 @@ public class AnalyzeBoardServiceImpl {
                 if(jsonExists) {
                     if ((dcmExists && iniExists && alveExists)) {
                         passIds.add(imageId);
-                        processJsonFile(channelSftp, folderPath,imageId,institutionId,diseaseClass);
+                        processJsonFile(channelSftp, folderPath,imageId,institutionId,diseaseClass,newFileName);
                         incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);
                         //processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
                         stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
@@ -579,7 +583,7 @@ public class AnalyzeBoardServiceImpl {
                         labellingExists = processJsonInputStream(jsonInputStream);
                         if(labellingExists && dcmExists){
                             passIds.add(imageId);
-                            processJsonFile(channelSftp, folderPath,imageId,institutionId,diseaseClass);
+                            processJsonFile(channelSftp, folderPath,imageId,institutionId,diseaseClass,newFileName);
                         incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);}
                         else{
                             errorDataStatus(errorList, institutionId, diseaseClass, imageId,jsonExists,dcmExists,false,false);
@@ -607,7 +611,7 @@ public class AnalyzeBoardServiceImpl {
                     incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링등록건수",null);
                     if ((labellingExists && iniExists)) {
                         passIds.add(imageId);
-                        processJsonFile(channelSftp, folderPath,imageId,institutionId,diseaseClass);
+                        processJsonFile(channelSftp, folderPath,imageId,institutionId,diseaseClass,newFileName);
                         incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);
                         //processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
                         stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
@@ -730,13 +734,13 @@ public class AnalyzeBoardServiceImpl {
 
 
     /**
-     *JSON에서 검수 값 읽어오기
+     *JSON값 불러오기
      */
-    private void processJsonFile(ChannelSftp channelSftp, String folderPath, String imageId, String institutionId, String diseaseClass) throws Exception {
+    private void processJsonFile(ChannelSftp channelSftp, String folderPath, String imageId, String institutionId,
+                                 String diseaseClass, String excelFileName) throws Exception {
 
         // JSON 파일 경로 설정
         String jsonFilePath = folderPath + (folderPath.contains("치주질환") ? "/Labelling/meta/" : "/Labelling/");
-        String secondCheckKey = folderPath.contains("치주질환") ? "Second_Check_Info" : "Second_Check_info";
 
         try (InputStream jsonFileStream = SFTPClient.readFile(channelSftp, jsonFilePath, imageId + ".json")) {
 
@@ -744,12 +748,16 @@ public class AnalyzeBoardServiceImpl {
             ObjectMapper objectMapper = new ObjectMapper();
             JsonNode rootNode = objectMapper.readTree(jsonFileStream);
 
-                // JSON 내용을 로컬에 저장
-                String savePath = "C:/app/disease_json/"; // 로컬 저장 경로
-                String fileName = String.format("%s_%s.json", diseaseClass, institutionId);
+            // JSON에 엑셀 파일 이름 추가
+            ((ObjectNode) rootNode).put("excelFileName", excelFileName);
 
-                // JSON 데이터를 로컬에 저장
-                jsonService.saveJsonToLocal(savePath, fileName, rootNode);
+            // JSON 내용을 로컬에 저장
+            String savePath = "C:/app/disease_json/"; // 로컬 저장 경로
+            String fileName = String.format("%s_%s.json", diseaseClass, institutionId);
+
+            // JSON 데이터를 로컬에 저장
+            jsonService.saveJsonToLocal(savePath, fileName, rootNode);
+
         } catch (Exception e) {
             log.error("Error while processing JSON file for Image ID: {}", imageId, e);
         }
