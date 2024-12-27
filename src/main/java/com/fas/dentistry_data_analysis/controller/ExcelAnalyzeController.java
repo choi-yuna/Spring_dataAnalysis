@@ -4,6 +4,7 @@ import com.fas.dentistry_data_analysis.DTO.AnalysisRequestDTO;
 import com.fas.dentistry_data_analysis.config.StorageConfig;
 import com.fas.dentistry_data_analysis.service.dashBoard.AnalyzeBoardServiceImpl;
 import com.fas.dentistry_data_analysis.service.AnalyzeDataService;
+import com.fas.dentistry_data_analysis.service.duplication.DuplicationService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -19,19 +20,21 @@ import java.util.concurrent.ExecutionException;
 @RequestMapping("/api")
 public class ExcelAnalyzeController {
 
-// private final String folderPath = "/치의학데이터 과제 데이터 수집/내부 데이터/";
-private final String folderPath = "/내부 데이터";
+ private final String folderPath = "/치의학데이터 과제 데이터 수집/내부 데이터/SNU";
+//private final String folderPath = "/내부 데이터";
 
 
         private final AnalyzeDataService analyzeDataService;
         private final AnalyzeBoardServiceImpl analyzeBoardService;
         private final StorageConfig  storageConfig;
+        private final DuplicationService duplicationService;
 
     @Autowired
-    public ExcelAnalyzeController(AnalyzeDataService analyzeDataService, AnalyzeBoardServiceImpl analyzeBoardService, StorageConfig storageConfig ) {
+    public ExcelAnalyzeController(AnalyzeDataService analyzeDataService, AnalyzeBoardServiceImpl analyzeBoardService, StorageConfig storageConfig,DuplicationService duplicationService ) {
         this.analyzeDataService = analyzeDataService;
         this.analyzeBoardService = analyzeBoardService;
         this.storageConfig = storageConfig;
+        this.duplicationService = duplicationService;
     }
 
     @PostMapping("/dashboard")
@@ -116,8 +119,25 @@ private final String folderPath = "/내부 데이터";
         }
     }
 
+    @PostMapping("/error-analyze")
+    public ResponseEntity<?> ErrorAnalyzeData(@RequestBody AnalysisRequestDTO request) {
+        try {
+            String[] fileIds = request.getFileIds();
+            String diseaseClass = request.getDiseaseClass();
+            int institutionId = request.getInstitutionId();
+            log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", fileIds, diseaseClass, institutionId);
+            Map<String, Object> stringObjectMap = duplicationService.extractAndCombineData("C:/app/dentistry", diseaseClass, institutionId);
+            return ResponseEntity.ok(Map.of("data", stringObjectMap));
+
+        } catch (IOException ex) {
+            throw new RuntimeException(ex);
+        } catch (ExecutionException ex) {
+            throw new RuntimeException(ex);
+        } catch (InterruptedException ex) {
+            throw new RuntimeException(ex);
+        }
 
 
-
+    }
 
 }

@@ -23,15 +23,15 @@ import java.util.stream.Collectors;
 @Service
 public class AnalyzeBoardServiceImpl {
     //원광대 서버 정보
-    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
-    private static final int SFTP_PORT = 2024;  // SFTP 포트
-    private static final String SFTP_USER = "master01";  // 사용자 계정
-    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
+//    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
+//    private static final int SFTP_PORT = 2024;  // SFTP 포트
+//    private static final String SFTP_USER = "master01";  // 사용자 계정
+//    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
     // SFTP 서버 정보
-//    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
-//    private static final int SFTP_PORT = 22;  // SFTP 포트
-//    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
-//    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
+    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
+    private static final int SFTP_PORT = 22;  // SFTP 포트
+    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
+    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
 
     private final JSONService jsonService;
     private final TotalDataGropedService totalDataGropedService;
@@ -41,6 +41,8 @@ public class AnalyzeBoardServiceImpl {
     private final AtomicBoolean refreshInProgress = new AtomicBoolean(false);
 
     private static final List<String> DISEASE_FOLDER_NAMES = Arrays.asList("골수염", "치주질환", "구강암","두개안면기형");
+    // 기관-질환별 JSON 파일 목록 관리
+    private final Map<String, Set<String>> institutionDiseaseJsonFiles = new HashMap<>();
 
 
     public AnalyzeBoardServiceImpl(JSONService jsonService, ExcelService excelService, TotalDataGropedService totalDataGropedService,FolderFileCacheManager folderFileCacheManager, StorageConfig storageConfig) {
@@ -62,6 +64,9 @@ public class AnalyzeBoardServiceImpl {
         }
 
 
+        // 중복 JSON 파일 정보를 저장할 Map
+        Map<String, Map<String, List<String>>> duplicateJsonFiles = new HashMap<>();
+
         List<String> passIds = new ArrayList<>();
         List<Map<String, Object>> resultList = new ArrayList<>();
         List<Map<String, Object>> errorList = new ArrayList<>();
@@ -74,6 +79,7 @@ public class AnalyzeBoardServiceImpl {
             jsonService.deleteExistingExcelFiles("C:/app/dentistry",".xlsx");
             jsonService.deleteExistingExcelFiles("C:/app/id",".json");
             jsonService.deleteExistingExcelFiles("C:/app/disease_json", ".json"); // JSON 저장 폴더 초기화
+            jsonService.deleteExistingExcelFiles("C:/app/error_json", ".json"); // JSON 저장 폴더 초기화
         }
 
         try {
@@ -81,11 +87,15 @@ public class AnalyzeBoardServiceImpl {
             channelSftp = SFTPClient.createSftpChannel(session);
 
             // 폴더 내 파일을 병렬로 처리
-            processFolderRecursively(channelSftp, folderPath, resultList, errorList, processedImageIds, refresh, passIds);
+            processFolderRecursively(channelSftp, folderPath, resultList, errorList, processedImageIds, refresh, passIds,duplicateJsonFiles);
 
         } finally {
             if (refresh) {
                 jsonService.savePassIdsToJson(passIds,"C:/app/id");
+
+                // 중복 JSON 파일 정보를 저장
+                jsonService.saveDuplicateJsonInfoToLocal(duplicateJsonFiles, "C:/app/error_json");
+
                 refreshInProgress.set(false);
             }
             if (channelSftp != null) channelSftp.disconnect();
@@ -129,11 +139,32 @@ public class AnalyzeBoardServiceImpl {
         return response;
     }
 
+    private String extractInstitutionId(String folderPath) {
+        if (folderPath.contains("고려대")) return "고려대학교";
+        if (folderPath.contains("SNU")) return "서울대학교";
+        if (folderPath.contains("단국대")) return "단국대학교";
+        if (folderPath.contains("BRM")) return "보라매병원";
+        if (folderPath.contains("원광대")) return "원광대학교";
+        if (folderPath.contains("조선대")) return "조선대학교";
+        return null; // 매칭되지 않는 경우
+    }
+
+    private String extractDiseaseClass(String folderPath) {
+        if (folderPath.contains("치주질환")) return "치주질환";
+        if (folderPath.contains("두개안면")) return "두개안면";
+        if (folderPath.contains("구강암")) return "구강암";
+        if (folderPath.contains("골수염")) return "골수염";
+        if (folderPath.contains("대조군")) return "골수염";
+        return null; // 매칭되지 않는 경우
+    }
+
+
     private void processFolderRecursively(ChannelSftp channelSftp, String folderPath,
                                           List<Map<String, Object>> resultList,
                                           List<Map<String, Object>> errorList,
                                           Set<String> processedImageIds,
-                                          boolean refresh,List<String> passIds) throws Exception {
+                                          boolean refresh,List<String> passIds,
+                                          Map<String, Map<String, List<String>>> duplicateJsonFiles) throws Exception {
         List<ChannelSftp.LsEntry> files;
 
         try {
@@ -145,6 +176,41 @@ public class AnalyzeBoardServiceImpl {
                 return; // 권한 문제가 있는 폴더는 건너뛰기
             }
             throw e; // 다른 예외는 재발생
+        }
+
+
+        // 기관 및 질환 정보 추출
+        String institutionId = extractInstitutionId(folderPath);
+        String diseaseClass = extractDiseaseClass(folderPath);
+
+        // 기관-질환 키 생성
+        String institutionDiseaseKey = institutionId + "_" + diseaseClass;
+
+        // 기관-질환별 JSON 파일 목록 초기화
+        Map<String, List<String>> diseaseData = duplicateJsonFiles.computeIfAbsent(institutionId, k -> new HashMap<>());
+        List<String> duplicates = diseaseData.computeIfAbsent(diseaseClass, k -> new ArrayList<>());
+
+        // JSON 파일 목록 추적
+        Set<String> jsonFileSet = institutionDiseaseJsonFiles.computeIfAbsent(institutionDiseaseKey, k -> new HashSet<>());
+
+        // 현재 폴더의 JSON 파일 목록 가져오기
+        String jsonPath = folderPath.contains("치주질환") ? folderPath + "/Labelling/meta" : folderPath + "/Labelling";
+        Set<String> jsonFiles = folderFileCacheManager.computeIfAbsent(jsonPath, path -> {
+            List<ChannelSftp.LsEntry> entries = SFTPClient.listFiles(channelSftp, path);
+            return entries.stream()
+                    .map(ChannelSftp.LsEntry::getFilename)
+                    .filter(name -> name.endsWith(".json"))
+                    .collect(Collectors.toSet());
+        });
+
+        // 중복 파일 체크 및 추가
+        for (String jsonFile : jsonFiles) {
+            if (!jsonFileSet.add(jsonFile)) { // 이미 추가된 파일이라면 중복으로 간주
+                if (!duplicates.contains(jsonFile)) {
+                    duplicates.add(jsonFile); // 중복 목록에 추가
+                    log.info("Duplicate JSON file detected: {} in {}", jsonFile, institutionDiseaseKey);
+                }
+            }
         }
 
         String targetDiseaseFolder = getTargetDiseaseFolder(folderPath);
@@ -193,7 +259,7 @@ public class AnalyzeBoardServiceImpl {
 
                 futures.add(CompletableFuture.runAsync(() -> {
                     try {
-                        processFile(channelSftp, folderPath, fileName, folderResultList, folderErrorList,processedImageIds, stopSubfolderSearch,passIds);
+                        processFile(channelSftp, folderPath, fileName, folderResultList, folderErrorList,processedImageIds, stopSubfolderSearch,passIds,duplicateJsonFiles);
                     } catch (Exception e) {
                         log.error("Error processing file: {}", fileName, e);
                     }
@@ -224,14 +290,13 @@ public class AnalyzeBoardServiceImpl {
             for (ChannelSftp.LsEntry entry : files) {
                 if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
                     String subFolderPath = folderPath + "/" + entry.getFilename();
-                    processFolderRecursively(channelSftp, subFolderPath, resultList, errorList,processedImageIds, refresh,passIds);
+                    processFolderRecursively(channelSftp, subFolderPath, resultList, errorList,processedImageIds, refresh,passIds,duplicateJsonFiles);
                 }
             }
         }
 
         executorService.shutdown();
     }
-
     private String getTargetDiseaseFolder(String folderPath) {
         for (String disease : DISEASE_FOLDER_NAMES) {
             if (folderPath.contains(disease)) {
@@ -278,7 +343,7 @@ public class AnalyzeBoardServiceImpl {
     //질환별 폴더 확인 로직
     private void processFile(ChannelSftp channelSftp, String folderPath, String fileName,
                              List<Map<String, Object>> resultList, List<Map<String, Object>> errorList,Set<String> processedImageIds,
-                             AtomicBoolean stopSubfolderSearch, List<String> passIds) throws Exception {
+                             AtomicBoolean stopSubfolderSearch, List<String> passIds,Map<String, Map<String, List<String>>> duplicateJsonFiles) throws Exception {
 
         // JSON 파일에서 DISEASE_CLASS와 INSTITUTION_ID 추출
         String diseaseClass = null;
@@ -300,13 +365,13 @@ public class AnalyzeBoardServiceImpl {
 
         if (folderPath.contains("고려대")) {
             institutionId = "고려대학교";
-        } else if (folderPath.contains("보라매")) {
+        } else if (folderPath.contains("BRM")) {
             institutionId = "보라매병원";
         } else if (folderPath.contains("단국대")) {
             institutionId = "단국대학교";
         } else if (folderPath.contains("국립암센터")) {
             institutionId = "국립암센터";
-        } else if (folderPath.contains("서울대")) {
+        } else if (folderPath.contains("SNU")) {
             institutionId = "서울대학교";
         } else if (folderPath.contains("원광대")) {
             institutionId = "원광대학교";
@@ -337,7 +402,6 @@ public class AnalyzeBoardServiceImpl {
                     .filter(name -> name.endsWith(".json"))
                     .collect(Collectors.toSet());
         });
-
 
         // 엑셀 데이터에서 IMAGE_ID만 추출 (엑셀에서 DISEASE_CLASS, INSTITUTION_ID는 제외)
         Set<String> imageIdsFromExcel = filteredData.stream()

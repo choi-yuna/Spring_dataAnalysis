@@ -187,5 +187,47 @@ public class JSONService {
         }
     }
 
+    public void saveDuplicateJsonInfoToLocal(Map<String, Map<String, List<String>>> duplicateJsonFiles, String savePath) {
+        // 저장 경로가 없으면 생성
+        File directory = new File(savePath);
+        if (!directory.exists()) {
+            if (directory.mkdirs()) {
+                log.info("Created directory at path: {}", savePath);
+            } else {
+                log.error("Failed to create directory at path: {}", savePath);
+                return; // 디렉토리 생성 실패 시 종료
+            }
+        }
+
+        for (Map.Entry<String, Map<String, List<String>>> institutionEntry : duplicateJsonFiles.entrySet()) {
+            String institutionId = institutionEntry.getKey();
+            Map<String, List<String>> diseaseData = institutionEntry.getValue();
+
+            for (Map.Entry<String, List<String>> diseaseEntry : diseaseData.entrySet()) {
+                String diseaseClass = diseaseEntry.getKey();
+                List<String> duplicates = diseaseEntry.getValue();
+
+                Map<String, Object> jsonContent = new HashMap<>();
+                jsonContent.put("institutionId", institutionId);
+                jsonContent.put("diseaseClass", diseaseClass);
+                jsonContent.put("duplicateCount", duplicates.size());
+                jsonContent.put("duplicateFiles", duplicates);
+
+                // 파일 이름 지정
+                String fileName = String.format("%s_%s.json", institutionId, diseaseClass);
+
+                // 로컬 경로에 저장
+                try (FileWriter fileWriter = new FileWriter(new File(directory, fileName))) {
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    objectMapper.writerWithDefaultPrettyPrinter().writeValue(fileWriter, jsonContent);
+                    log.info("Saved duplicate JSON info to file: {}", fileName);
+                } catch (IOException e) {
+                    log.error("Error saving duplicate JSON info to file: {}", fileName, e);
+                }
+            }
+        }
+    }
+
+
 
 }
