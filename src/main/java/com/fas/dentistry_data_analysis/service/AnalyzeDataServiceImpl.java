@@ -38,7 +38,6 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
     private final JsonFileProcessor jsonFileProcessor;
     private final JSONService jsonService;
 
-
     @Autowired
     public AnalyzeDataServiceImpl(FileStorageService fileStorageService, FileProcessor fileProcessor, JsonFileProcessor jsonFileProcessor,JSONService jsonService) {
         this.fileStorageService = fileStorageService;
@@ -46,6 +45,25 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         this.jsonFileProcessor = jsonFileProcessor;
         this.jsonService = jsonService;
     }
+
+
+    private static final Map<String, String> DiseaseClassMap = new HashMap<>() {{
+        put("A", "치주질환");
+        put("B", "골수염");
+        put("C", "구강암");
+        put("D", "두개안면");
+        put("E", "대조군");
+    }};
+
+    private static final Map<String, String> InstitutionMap = new HashMap<>() {{
+        put("1", "원광대학교");
+        put("2", "고려대학교");
+        put("3", "서울대학교");
+        put("4", "국립암센터");
+        put("5", "단국대학교");
+        put("6", "조선대학교");
+        put("7", "보라매병원");
+    }};
 
     @Override
 // 다중 파일 ID를 기반으로 데이터 분석을 수행하는 메소드
@@ -255,6 +273,9 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
             throw new IllegalArgumentException("지정된 경로가 유효하지 않거나 폴더가 아닙니다: " + folderPath);
         }
 
+        String diseaseKeyword = DiseaseClassMap.getOrDefault(diseaseClass, "");
+        String institutionKeyword = institutionId == 0 ? "" : InstitutionMap.getOrDefault(String.valueOf(institutionId), "");
+
         Set<String> passIdsSet = new HashSet<>(jsonService.loadPassIdsFromJson("C:/app/id/pass_ids.json"));
         Set<String> IdSet = new HashSet<>();
 
@@ -275,6 +296,12 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
                 continue;
             }
 
+            // 파일 필터링
+            String fileName = file.getName();
+            if (!isFileMatchingCriteria(fileName, diseaseKeyword, institutionKeyword)) {
+                continue; // 필터 조건에 맞지 않으면 건너뜀
+            }
+
             // 각 파일을 처리하는 작업을 병렬로 실행
             futureResults.add(executor.submit(() ->
                     fileProcessor.processServerFile(file, diseaseClass, institutionId,passIdsSet,IdSet)
@@ -291,6 +318,12 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         return combinedData;
     }
 
+    private boolean isFileMatchingCriteria(String fileName, String diseaseKeyword, String institutionKeyword) {
+        boolean matchesDisease = diseaseKeyword.isEmpty() || fileName.contains(diseaseKeyword);
+        boolean matchesInstitution = institutionKeyword.isEmpty() || fileName.contains(institutionKeyword);
+        return matchesDisease && matchesInstitution;
+    }
+
     @Override
     public List<Map<String, Map<String, String>>> analyzeJsonData(String folderPath, String diseaseClass, int institutionId) throws IOException, ExecutionException, InterruptedException {
         if (folderPath == null || folderPath.isEmpty()) {
@@ -303,6 +336,8 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
             throw new IllegalArgumentException("지정된 경로가 유효하지 않거나 폴더가 아닙니다: " + folderPath);
         }
 
+        String diseaseKeyword = DiseaseClassMap.getOrDefault(diseaseClass, "");
+        String institutionKeyword = institutionId == 0 ? "" : InstitutionMap.getOrDefault(String.valueOf(institutionId), "");
         // 이미 처리된 파일 추적용 Set
         Set<String> processedFiles = new HashSet<>();
 
@@ -319,6 +354,13 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
             if (!file.isFile() || !processedFiles.add(file.getName())) {
                 continue;
             }
+
+            // 파일 필터링
+            String fileName = file.getName();
+            if (!isFileMatchingCriteria(fileName, diseaseKeyword, institutionKeyword)) {
+                continue; // 필터 조건에 맞지 않으면 건너뜀
+            }
+
 
             // 각 파일을 처리하는 작업을 병렬로 실행
             futureResults.add(executor.submit(() ->

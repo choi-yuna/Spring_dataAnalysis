@@ -361,27 +361,28 @@ public class DuplicationService {
         // 오류 ID를 저장할 리스트
         List<String> mismatchedIds = new ArrayList<>();
 
-        // JSON 데이터를 Identifier 기준으로 Map에 저장 (중복 키 처리)
-        Map<String, Map<String, String>> jsonDataById = jsonData.stream()
+        // JSON 데이터를 Identifier와 excelFileName 기준으로 Map에 저장 (중복 키 처리)
+        Map<String, Map<String, String>> jsonDataByKey = jsonData.stream()
                 .collect(Collectors.toMap(
-                        data -> data.get("Identifier"), // Identifier를 Key로 사용
-                        data -> data,                  // Value로 Map 저장
-                        (existing, replacement) -> existing // 중복 발생 시 기존 값 유지
+                        data -> data.get("Identifier") + "|" + data.get("excelFileName"), // Identifier와 excelFileName을 Key로 사용
+                        data -> data,                                                    // Value로 Map 저장
+                        (existing, replacement) -> existing                              // 중복 발생 시 기존 값 유지
                 ));
 
         for (Map<String, String> excelRow : excelData) {
-            String id = excelRow.get("Identifier"); // 엑셀의 Identifier 값
+            String id = excelRow.get("Identifier");            // 엑셀의 Identifier 값
+            String excelFileName = excelRow.get("excelFileName"); // 엑셀의 파일 이름
 
-            // JSON 데이터에서 동일 ID 찾기
-            Map<String, String> jsonRow = jsonDataById.get(id);
+            // JSON 데이터에서 동일 ID와 excelFileName 찾기
+            String key = id + "|" + excelFileName;
+            Map<String, String> jsonRow = jsonDataByKey.get(key);
 
             if (jsonRow == null) {
-                log.warn("JSON 데이터에서 Identifier를 찾을 수 없습니다: {}", id);
-                continue; // JSON 데이터에 해당 ID가 없는 경우 무시
+                continue; // JSON 데이터에 해당 조합이 없는 경우 무시
             }
 
             // 비교할 필드 목록
-            List<String> fieldsToCompare = List.of("excelFileName", "CAPTURE_TIME", "P_GENDER", "P_AGE", "INSTITUTION_ID");
+            List<String> fieldsToCompare = List.of("CAPTURE_TIME", "P_GENDER", "P_AGE", "INSTITUTION_ID");
 
             // 필드 값 비교
             boolean hasMismatch = false;
@@ -390,8 +391,8 @@ public class DuplicationService {
                 String jsonValue = jsonRow.get(field);
 
                 if (!Objects.equals(excelValue, jsonValue)) {
-                    log.warn("Mismatch detected for ID {}: Field {} (Excel: {}, JSON: {})",
-                            id, field, excelValue, jsonValue);
+                    log.warn("Mismatch detected for ID {} and File {}: Field {} (Excel: {}, JSON: {})",
+                            id, excelFileName, field, excelValue, jsonValue);
                     hasMismatch = true;
                 }
             }
@@ -404,7 +405,6 @@ public class DuplicationService {
 
         return mismatchedIds; // 오류 Identifier 리스트 반환
     }
-
 
     private JsonNode findValueInSections(JsonNode recordNode, String key) {
         // 최상위에서 값 검색

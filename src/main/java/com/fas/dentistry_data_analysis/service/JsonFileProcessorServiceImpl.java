@@ -38,11 +38,7 @@ public class JsonFileProcessorServiceImpl implements JsonFileProcessor {
 
             for (JsonNode recordNode : rootNode) {
                 // JSON 데이터의 DISEASE_CLASS 추출
-                String diseaseClassValue = recordNode.path("DISEASE_CLASS").asText();
-                if (diseaseClassValue == null || diseaseClassValue.isEmpty()) {
-                    log.warn("JSON 데이터에서 DISEASE_CLASS 값을 찾을 수 없습니다.");
-                    continue;
-                }
+                String diseaseClassValue = diseaseClass;
 
                 // 헤더 매핑 가져오기
                 Map<String, List<String>> headers = JsonHeaderMapping.getHeadersForJson(diseaseClassValue);
@@ -54,12 +50,6 @@ public class JsonFileProcessorServiceImpl implements JsonFileProcessor {
                 List<String> requiredHeaders = headers.get("required");
                 List<String> optionalHeaders = headers.get("optional");
 
-                // 기관 ID 필터 조건 검사
-                int institutionIdValue = recordNode.path("INSTITUTION_ID").asInt(0);
-                if (!((diseaseClass.equals("0") || diseaseClass.equals(diseaseClassValue)) &&
-                        (institutionId == 0 || institutionId == institutionIdValue))) {
-                    continue; // 조건에 맞지 않으면 제외
-                }
 
                 // 필수 데이터 추출
                 Map<String, String> requiredData = new LinkedHashMap<>();
@@ -84,7 +74,10 @@ public class JsonFileProcessorServiceImpl implements JsonFileProcessor {
 
                 // 결과 데이터 구성
                 Map<String, Map<String, String>> rowData = new HashMap<>();
-                rowData.put("required", requiredData);
+                Map<String, String> combinedRequiredData = new HashMap<>();
+                combinedRequiredData.put("disease", diseaseClass);
+                combinedRequiredData.putAll(requiredData); // 기존 requiredData 병합
+                rowData.put("required", combinedRequiredData);
                 rowData.put("optional", optionalData);
                 dataList.add(rowData);
             }
