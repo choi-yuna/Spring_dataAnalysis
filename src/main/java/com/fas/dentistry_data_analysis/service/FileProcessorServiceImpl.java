@@ -98,92 +98,69 @@ public class FileProcessorServiceImpl implements FileProcessor{
                         }
                     }
 
-                    Integer diseaseClassIndex = headerIndexMap.get("DISEASE_CLASS");
-                    Integer institutionIdIndex = headerIndexMap.get("INSTITUTION_ID");
                     Integer imageIdIndex = headerIndexMap.get("IMAGE_ID");
 
-                    if (diseaseClassIndex != null && institutionIdIndex != null) {
-                        for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) { // 9번째 행부터 데이터 읽기
-                            Row row = sheet.getRow(rowIndex);
-                            if (row != null) {
-                                Future<List<Map<String, Map<String, String>>>> future = executor.submit(() -> {
-                                    List<Map<String, Map<String, String>>> rowDataList = new ArrayList<>();
+                    for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) { // 9번째 행부터 데이터 읽기
+                        Row row = sheet.getRow(rowIndex);
+                        if (row != null) {
+                            Future<List<Map<String, Map<String, String>>>> future = executor.submit(() -> {
+                                List<Map<String, Map<String, String>>> rowDataList = new ArrayList<>();
 
-                                    // Pass된 ID인지 확인
-                                    String imageIdValue = ExcelUtils.getCellValueAsString(row.getCell(imageIdIndex)).trim();
-                                    if (!passIdsSet.contains(imageIdValue)) {
-                                        return Collections.emptyList();
+                                // Pass된 ID인지 확인
+                                String imageIdValue = ExcelUtils.getCellValueAsString(row.getCell(imageIdIndex)).trim();
+                                if (!passIdsSet.contains(imageIdValue)) {
+                                    return Collections.emptyList();
+                                }
+
+                                // 중복 검사
+                                synchronized (processedIds) {
+                                    if (!processedIds.add(imageIdValue)) {
+                                        return Collections.emptyList(); // 이미 처리된 경우 제외
                                     }
+                                }
 
-                                    // 중복 검사
-                                    synchronized (processedIds) {
-                                        if (!processedIds.add(imageIdValue)) {
-                                            return Collections.emptyList(); // 이미 처리된 경우 제외
-                                        }
+                                Map<String, String> requiredData = new LinkedHashMap<>();
+                                Map<String, String> optionalData = new LinkedHashMap<>();
+
+                                // 필수 항목 처리
+                                for (String header : requiredHeaders) {
+                                    Integer cellIndex = headerIndexMap.get(header);
+                                    if (cellIndex != null) {
+                                        Cell cell = row.getCell(cellIndex);
+                                        String cellValue = (cell != null) ? ExcelUtils.getCellValueAsString(cell) : "";
+                                        requiredData.put(header, cellValue);
                                     }
+                                }
 
-                                    // 질환 클래스와 기관 ID 값 가져오기
-                                    String diseaseClassValue = ExcelUtils.getCellValueAsString(row.getCell(diseaseClassIndex));
-                                    String institutionIdValueStr = ExcelUtils.getCellValueAsString(row.getCell(institutionIdIndex));
-
-                                    // 질환 클래스 또는 기관 ID가 비어 있으면 제외
-                                    if (diseaseClassValue == null || diseaseClassValue.isEmpty() ||
-                                            institutionIdValueStr == null || institutionIdValueStr.isEmpty()) {
-                                        return Collections.emptyList(); // 빠르게 제외
+                                // 선택 항목 처리
+                                for (String header : optionalHeaders) {
+                                    Integer cellIndex = headerIndexMap.get(header);
+                                    if (cellIndex != null) {
+                                        Cell cell = row.getCell(cellIndex);
+                                        String cellValue = (cell != null) ? ExcelUtils.getCellValueAsString(cell) : "";
+                                        optionalData.put(header, cellValue);
                                     }
+                                }
 
-                                    try {
-                                        int institutionIdValue = Integer.parseInt(institutionIdValueStr);
+                                // 필수 및 선택 항목이 모두 비어 있으면 제외
+                                if (requiredData.isEmpty() && optionalData.isEmpty()) {
+                                    return Collections.emptyList();
+                                }
 
-                                        // 필터 조건: 질환 클래스와 기관 ID 검사
-                                        if (!((diseaseClass.equals("0") || diseaseClass.equals(diseaseClassValue)) &&
-                                                (institutionId == 0 || institutionId == institutionIdValue))) {
-                                            return Collections.emptyList(); // 조건에 맞지 않으면 제외
-                                        }
-                                    } catch (NumberFormatException e) {
-                                        log.error("숫자로 변환할 수 없는 institutionId 값: {}", institutionIdValueStr);
-                                        return Collections.emptyList(); // 숫자 변환 실패 시 제외
-                                    }
+                                // 결과 데이터 생성
+                                Map<String, Map<String, String>> rowData = new HashMap<>();
+                                Map<String, String> combinedRequiredData = new HashMap<>();
+                                combinedRequiredData.put("disease", diseaseClass);
+                                combinedRequiredData.putAll(requiredData); // 기존 requiredData 병합
+                                rowData.put("required", combinedRequiredData);
+                                rowData.put("optional", optionalData);
 
-                                    Map<String, String> requiredData = new LinkedHashMap<>();
-                                    Map<String, String> optionalData = new LinkedHashMap<>();
+                                rowDataList.add(rowData);
 
-                                    // 필수 항목 처리
-                                    for (String header : requiredHeaders) {
-                                        Integer cellIndex = headerIndexMap.get(header);
-                                        if (cellIndex != null) {
-                                            Cell cell = row.getCell(cellIndex);
-                                            String cellValue = (cell != null) ? ExcelUtils.getCellValueAsString(cell) : "";
-                                            requiredData.put(header, cellValue);
-                                        }
-                                    }
+                                return rowDataList;
+                            });
 
-                                    // 선택 항목 처리
-                                    for (String header : optionalHeaders) {
-                                        Integer cellIndex = headerIndexMap.get(header);
-                                        if (cellIndex != null) {
-                                            Cell cell = row.getCell(cellIndex);
-                                            String cellValue = (cell != null) ? ExcelUtils.getCellValueAsString(cell) : "";
-                                            optionalData.put(header, cellValue);
-                                        }
-                                    }
-
-                                    // 필수 및 선택 항목이 모두 비어 있으면 제외
-                                    if (requiredData.isEmpty() && optionalData.isEmpty()) {
-                                        return Collections.emptyList();
-                                    }
-
-                                    // 결과 데이터 생성
-                                    Map<String, Map<String, String>> rowData = new HashMap<>();
-                                    rowData.put("required", requiredData);
-                                    rowData.put("optional", optionalData);
-                                    rowDataList.add(rowData);
-
-                                    return rowDataList;
-                                });
-
-                                futureResults.add(future);
-                            }
+                            futureResults.add(future);
                         }
                     }
                 }
@@ -208,7 +185,6 @@ public class FileProcessorServiceImpl implements FileProcessor{
 
         return dataList; // 최종 데이터 반환
     }
-
 
 
 

@@ -53,10 +53,10 @@ public class JsonHeaderMapping {
         jsonHeaderMap.put("D", Map.of(
                 "required", Arrays.asList(
                         "DISEASE_CLASS", "INSTITUTION_ID", "PATIENT_NO", "IMAGE_NO", "IMAGE_SRC", "CAPTURE_TIME",
-                        "Identifier", "P_GENDER", "P_AGE", "DI_DISEASE", "DI_TIME"
+                        "IMAGE_ID", "P_GENDER", "P_AGE", "DI_DISEASE", "DI_TIME","DI_DETAIL"
                 ),
                 "optional", Arrays.asList(
-                        "MAKER_INFO", "H_RESOLUTION", "V_RESOLUTION", "TOTAL_SLICE_NO",
+                        "MAKER_IF","RESOLUTION_H","RESOLUTION_V","SLICETHICKNESS","TOTAL_SLICE_NO",
                         "P_WEIGHT", "P_HEIGHT", "P_RES_AREA", "DI_NOTE", "CI_SURGERY"
                 )
         ));

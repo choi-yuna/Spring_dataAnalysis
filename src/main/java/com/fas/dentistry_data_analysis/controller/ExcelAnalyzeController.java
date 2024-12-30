@@ -21,7 +21,7 @@ import java.util.concurrent.ExecutionException;
 public class ExcelAnalyzeController {
 
 // private final String folderPath = "/치의학데이터 과제 데이터 수집/내부 데이터/SNU";
-private final String folderPath = "/내부 데이터/원광대/치주질환";
+private final String folderPath = "/내부 데이터/서울대";
 
 
         private final AnalyzeDataService analyzeDataService;
