@@ -80,7 +80,7 @@ public class DataGropedService {
             List<List<String>> controlData = null;
 
             // "골수염" 질환에 대해서만 controlData 추가
-            if (diseaseClass.equals("골수염")) {
+            if (diseaseClass.contains("골수염")) {
                 controlData = new ArrayList<>();
                 diseaseData.put("controlData", controlData);
             }
@@ -104,7 +104,7 @@ public class DataGropedService {
                 }
 
                 // "골수염"에 대한 단국대학교 controlData 추가
-                if (diseaseClass.equals("골수염") && institutionId.equals("단국대학교")) {
+                if (diseaseClass.contains("골수염") && institutionId.equals("단국대학교")) {
                     for (Map.Entry<String, Integer> controlGroupEntry : controlGroupDiseaseGoals.getOrDefault(institutionId, new HashMap<>()).entrySet()) {
                         String controlGroupName = controlGroupEntry.getKey(); // "단국대학교 (대조군)" 또는 "단국대학교 (질환군)"
                         int controlGroupGoalCount = controlGroupEntry.getValue();
@@ -139,7 +139,7 @@ public class DataGropedService {
 
             Map<String, Object> diseaseData = groupedData.get(diseaseClass);
             List<List<String>> subData = (List<List<String>>) diseaseData.get("subData");
-            List<List<String>> controlData = diseaseClass.equals("골수염") ?
+            List<List<String>> controlData = diseaseClass.contains("골수염") ?
                     (List<List<String>>) diseaseData.get("controlData") : null;
 
             // 총합 데이터 업데이트
@@ -295,7 +295,7 @@ public class DataGropedService {
                 }
 
                 // 단국대학교의 "골수염" 데이터 처리
-                if (institutionId.equals("단국대학교") && diseaseClass.equals("골수염")) {
+                if (institutionId.equals("단국대학교") && diseaseClass.contains("골수염")) {
                     for (Map.Entry<String, Integer> controlGroupEntry : controlGroupDiseaseGoals.getOrDefault(diseaseClass, new HashMap<>()).entrySet()) {
                         String controlGroupName = controlGroupEntry.getKey(); // "골수염(대조군)" 또는 "골수염(질환군)"
                         int controlGroupGoalCount = controlGroupEntry.getValue();
@@ -355,7 +355,7 @@ public class DataGropedService {
             }
 
             // controlData 업데이트 ("골수염"의 단국대학교 대조군/질환군 구분 저장)
-            if (controlData != null && diseaseClass.equals("골수염")) {
+            if (controlData != null && diseaseClass.contains("골수염")) {
                 String controlGroupName = (groupType != null && groupType.equals("대조군")) ? "(대조군)" : "(질환군)";
                 for (List<String> controlRow : controlData) {
                     if (controlRow.get(0).equals(controlGroupName)) {
