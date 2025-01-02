@@ -143,8 +143,8 @@ public class AnalyzeBoardServiceImpl {
     private String extractInstitutionId(String folderPath) {
         if (folderPath.contains("고려대")) return "고려대학교";
         if (folderPath.contains("서울대")) return "서울대학교";
-        if (folderPath.contains("DKU")) return "단국대학교";
-        if (folderPath.contains("BRM")) return "보라매병원";
+        if (folderPath.contains("단국대")) return "단국대학교";
+        if (folderPath.contains("보라매")) return "보라매병원";
         if (folderPath.contains("원광대")) return "원광대학교";
         if (folderPath.contains("조선대")) return "조선대학교";
         return null; // 매칭되지 않는 경우
@@ -239,8 +239,11 @@ public class AnalyzeBoardServiceImpl {
                 resultList.addAll(existingResults);
                 return; // 추가 처리 건너뜁니다.
             }
+        } else if (!refresh) {
+            log.info("JSON result file does not exist and refresh is false. Skipping this folder: {}", folderPath);
 
         }
+
         // 결과를 새로 분석하는 로직
         List<Map<String, Object>> folderResultList = new ArrayList<>();
         List<Map<String, Object>> folderErrorList = new ArrayList<>();
@@ -301,7 +304,7 @@ public class AnalyzeBoardServiceImpl {
     private String getTargetDiseaseFolder(String folderPath) {
         for (String disease : DISEASE_FOLDER_NAMES) {
             if (folderPath.contains(disease)) {
-                return folderPath.substring(0, folderPath.indexOf(disease) + disease.length());
+                return folderPath;//.substring(0, folderPath.indexOf(disease) + disease.length());
             }
         }
         return null; // 포함되지 않는 경우
@@ -368,7 +371,7 @@ public class AnalyzeBoardServiceImpl {
             institutionId = "고려대학교";
         } else if (folderPath.contains("보라매")) {
             institutionId = "보라매병원";
-        } else if (folderPath.contains("DKU")) {
+        } else if (folderPath.contains("단국대")) {
             institutionId = "단국대학교";
         } else if (folderPath.contains("국립암센터")) {
             institutionId = "국립암센터";
