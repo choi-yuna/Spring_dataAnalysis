@@ -24,15 +24,15 @@ import java.util.stream.Collectors;
 @Service
 public class AnalyzeBoardServiceImpl {
     //원광대 서버 정보
-    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
-    private static final int SFTP_PORT = 2024;  // SFTP 포트
-    private static final String SFTP_USER = "master01";  // 사용자 계정
-    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
+//    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
+//    private static final int SFTP_PORT = 2024;  // SFTP 포트
+//    private static final String SFTP_USER = "master01";  // 사용자 계정
+//    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
     // SFTP 서버 정보
-//    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
-//    private static final int SFTP_PORT = 22;  // SFTP 포트
-//    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
-//    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
+    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
+    private static final int SFTP_PORT = 22;  // SFTP 포트
+    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
+    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
 
     private final JSONService jsonService;
     private final TotalDataGropedService totalDataGropedService;
@@ -142,9 +142,9 @@ public class AnalyzeBoardServiceImpl {
 
     private String extractInstitutionId(String folderPath) {
         if (folderPath.contains("고려대")) return "고려대학교";
-        if (folderPath.contains("서울대")) return "서울대학교";
-        if (folderPath.contains("단국대")) return "단국대학교";
-        if (folderPath.contains("보라매")) return "보라매병원";
+        if (folderPath.contains("SNU")) return "서울대학교";
+        if (folderPath.contains("DKU")) return "단국대학교";
+        if (folderPath.contains("BRM")) return "보라매병원";
         if (folderPath.contains("원광대")) return "원광대학교";
         if (folderPath.contains("조선대")) return "조선대학교";
         return null; // 매칭되지 않는 경우
@@ -239,11 +239,8 @@ public class AnalyzeBoardServiceImpl {
                 resultList.addAll(existingResults);
                 return; // 추가 처리 건너뜁니다.
             }
-        } else if (!refresh) {
-            log.info("JSON result file does not exist and refresh is false. Skipping this folder: {}", folderPath);
 
         }
-
         // 결과를 새로 분석하는 로직
         List<Map<String, Object>> folderResultList = new ArrayList<>();
         List<Map<String, Object>> folderErrorList = new ArrayList<>();
@@ -304,7 +301,7 @@ public class AnalyzeBoardServiceImpl {
     private String getTargetDiseaseFolder(String folderPath) {
         for (String disease : DISEASE_FOLDER_NAMES) {
             if (folderPath.contains(disease)) {
-                return folderPath;//.substring(0, folderPath.indexOf(disease) + disease.length());
+                return folderPath.substring(0, folderPath.indexOf(disease) + disease.length());
             }
         }
         return null; // 포함되지 않는 경우
@@ -371,11 +368,11 @@ public class AnalyzeBoardServiceImpl {
             institutionId = "고려대학교";
         } else if (folderPath.contains("보라매")) {
             institutionId = "보라매병원";
-        } else if (folderPath.contains("단국대")) {
+        } else if (folderPath.contains("DKU")) {
             institutionId = "단국대학교";
         } else if (folderPath.contains("국립암센터")) {
             institutionId = "국립암센터";
-        } else if (folderPath.contains("서울대")) {
+        } else if (folderPath.contains("SNU")) {
             institutionId = "서울대학교";
         } else if (folderPath.contains("원광대")) {
             institutionId = "원광대학교";
@@ -532,9 +529,6 @@ public class AnalyzeBoardServiceImpl {
             boolean dcmExists = false;
             boolean jsonExists = false;
             boolean iniExists = false;
-            boolean toothExists = false;
-            boolean tlaExists = false;
-            boolean cejExists = false;
             boolean alveExists = false;
             boolean labellingExists = false;
 
@@ -551,8 +545,8 @@ public class AnalyzeBoardServiceImpl {
                 dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm", "");
                 jsonExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling/meta");
                 iniExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".ini", "/Labelling/draw");
-               // toothExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/tooth");
-               // tlaExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/tla");
+                // toothExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/tooth");
+                // tlaExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/tla");
                 //cejExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/cej");
                 alveExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".png", "/Labelling/alve");
 
@@ -587,7 +581,7 @@ public class AnalyzeBoardServiceImpl {
                         if(labellingExists && dcmExists){
                             passIds.add(imageId);
                             processJsonFile(channelSftp, folderPath,imageId,institutionId,diseaseClass,newFileName);
-                        incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);}
+                            incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);}
                         else{
                             errorDataStatus(errorList, institutionId, diseaseClass, imageId,jsonExists,dcmExists,false,false);
                         }  // 이 시점에서 하위 폴더 탐색을 중지
@@ -875,7 +869,7 @@ public class AnalyzeBoardServiceImpl {
 
 
 
-   // private final Map<String, Set<String>> folderFileCache = new ConcurrentHashMap<>();
+    // private final Map<String, Set<String>> folderFileCache = new ConcurrentHashMap<>();
 
     private boolean checkFileExistsInSFTP(ChannelSftp channelSftp, String folderPath, String fileName, String subFolder) throws SftpException {
         // 폴더와 서브폴더 경로 결합
