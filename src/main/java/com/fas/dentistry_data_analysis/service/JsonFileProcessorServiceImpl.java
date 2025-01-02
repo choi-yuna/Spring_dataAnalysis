@@ -97,9 +97,16 @@ public class JsonFileProcessorServiceImpl implements JsonFileProcessor {
      */
 
     private JsonNode findValueInSections(JsonNode recordNode, String key) {
+        // 공백 제거된 key 생성
+        String sanitizedKey = key.replaceAll("\\s+", "");
+
         // JSON 최상위에서 값 검색
-        if (recordNode.has(key)) {
-            return recordNode.get(key);
+        Iterator<String> rootFieldNames = recordNode.fieldNames();
+        while (rootFieldNames.hasNext()) {
+            String fieldName = rootFieldNames.next();
+            if (fieldName.replaceAll("\\s+", "").equals(sanitizedKey)) {
+                return recordNode.get(fieldName);
+            }
         }
 
         // JSON 섹션에서 값 검색
@@ -110,18 +117,29 @@ public class JsonFileProcessorServiceImpl implements JsonFileProcessor {
 
             if (section.isArray()) {
                 for (JsonNode item : section) {
-                    if (item.has(key)) {
-                        return item.get(key);
+                    Iterator<String> itemFieldNames = item.fieldNames();
+                    while (itemFieldNames.hasNext()) {
+                        String itemFieldName = itemFieldNames.next();
+                        if (itemFieldName.replaceAll("\\s+", "").equals(sanitizedKey)) {
+                            return item.get(itemFieldName);
+                        }
                     }
                 }
-            } else if (section.has(key)) {
-                return section.get(key);
+            } else {
+                Iterator<String> sectionFieldNames = section.fieldNames();
+                while (sectionFieldNames.hasNext()) {
+                    String sectionFieldName = sectionFieldNames.next();
+                    if (sectionFieldName.replaceAll("\\s+", "").equals(sanitizedKey)) {
+                        return section.get(sectionFieldName);
+                    }
+                }
             }
         }
 
         // 값을 찾을 수 없으면 null 반환
         return null;
     }
+
 
     @Override
     public List<Map<String, Map<String, String>>> processJsonFile(File file, String diseaseClass, int institutionId) throws IOException {

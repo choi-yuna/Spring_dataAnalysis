@@ -41,7 +41,7 @@ public class AnalyzeBoardServiceImpl {
     private final StorageConfig storageConfig;
     private final AtomicBoolean refreshInProgress = new AtomicBoolean(false);
 
-    private static final List<String> DISEASE_FOLDER_NAMES = Arrays.asList("골수염", "치주질환", "구강암","두개안면기형");
+    private static final List<String> DISEASE_FOLDER_NAMES = Arrays.asList("골수염", "치주질환", "구강암","두개안면기형","대조군");
     // 기관-질환별 JSON 파일 목록 관리
     private final Map<String, Set<String>> institutionDiseaseJsonFiles = new HashMap<>();
 
@@ -142,8 +142,8 @@ public class AnalyzeBoardServiceImpl {
 
     private String extractInstitutionId(String folderPath) {
         if (folderPath.contains("고려대")) return "고려대학교";
-        if (folderPath.contains("SNU")) return "서울대학교";
-        if (folderPath.contains("단국대")) return "단국대학교";
+        if (folderPath.contains("서울대")) return "서울대학교";
+        if (folderPath.contains("DKU")) return "단국대학교";
         if (folderPath.contains("BRM")) return "보라매병원";
         if (folderPath.contains("원광대")) return "원광대학교";
         if (folderPath.contains("조선대")) return "조선대학교";
@@ -155,7 +155,7 @@ public class AnalyzeBoardServiceImpl {
         if (folderPath.contains("두개안면")) return "두개안면";
         if (folderPath.contains("구강암")) return "구강암";
         if (folderPath.contains("골수염")) return "골수염";
-        if (folderPath.contains("대조군")) return "골수염";
+        if (folderPath.contains("대조군")) return "골수염(대조군)";
         return null; // 매칭되지 않는 경우
     }
 
@@ -359,7 +359,7 @@ public class AnalyzeBoardServiceImpl {
         } else if (folderPath.contains("골수염")) {
             diseaseClass = "골수염";
         } else if (folderPath.contains("대조군")) {
-            diseaseClass = "골수염";
+            diseaseClass = "골수염(대조군)";
         } else {
             log.warn("Unknown disease class in folder path: {}", folderPath);
         }
@@ -368,7 +368,7 @@ public class AnalyzeBoardServiceImpl {
             institutionId = "고려대학교";
         } else if (folderPath.contains("보라매")) {
             institutionId = "보라매병원";
-        } else if (folderPath.contains("단국대")) {
+        } else if (folderPath.contains("DKU")) {
             institutionId = "단국대학교";
         } else if (folderPath.contains("국립암센터")) {
             institutionId = "국립암센터";
@@ -390,7 +390,7 @@ public class AnalyzeBoardServiceImpl {
         String storagePath = storageConfig.getStoragePath();
         String uuid = UUID.randomUUID().toString();
         // 파일 이름에 질환과 기관 정보를 추가
-        String newFileName = String.format("%s_%s_%s_%s", diseaseClass, institutionId, uuid,".xlsx");
+        String newFileName = String.format("%s_%s_%s_%s_%s", diseaseClass, institutionId, fileName,uuid,".xlsx");
         jsonService.saveExcelToLocal(channelSftp, folderPath, fileName,newFileName);
 
         // 엑셀 파일 처리 (엑셀 파일에는 DISEASE_CLASS와 INSTITUTION_ID가 없다)

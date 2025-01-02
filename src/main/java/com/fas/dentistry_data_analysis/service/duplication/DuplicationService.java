@@ -128,13 +128,13 @@ public class DuplicationService {
         String fileName = file.getName().toLowerCase();
 
         if (fileName.endsWith(".xlsx")) {
-            findFilteredDuplicateImageIds(file, diseaseClass, institutionId, passIdsSet, combinationMap, duplicateDetailsMap, extractedDataList);
+            findFilteredDuplicateImageIds(file, passIdsSet, combinationMap, duplicateDetailsMap, extractedDataList);
         } else {
             throw new IllegalArgumentException("지원하지 않는 파일 형식입니다: " + fileName);
         }
     }
 
-    public void findFilteredDuplicateImageIds(File excelFile, String diseaseClass, int institutionId,
+    public void findFilteredDuplicateImageIds(File excelFile,
                                               Set<String> passIdsSet,
                                               Map<String, List<String>> combinationMap,
                                               Map<String, List<String>> duplicateDetailsMap,
@@ -160,6 +160,7 @@ public class DuplicationService {
                 validateHeaderIndices(headerIndexMap);
 
 
+                Integer diseaseClassIndex = headerIndexMap.get("DISEASE_CLASS");
                 Integer institutionIdIndex = headerIndexMap.get("INSTITUTION_ID");
                 Integer imageIdIndex = headerIndexMap.get("IMAGE_ID");
                 Integer captureTimeIndex = headerIndexMap.get("CAPTURE_TIME");
@@ -170,9 +171,8 @@ public class DuplicationService {
                     Row row = sheet.getRow(rowIndex);
                     if (row != null) {
 
-
-
                         String imageId = ExcelUtils.getCellValueAsString(row.getCell(imageIdIndex)).trim();
+                        String diseaseClass = ExcelUtils.getCellValueAsString(row.getCell(diseaseClassIndex)).trim();
                         String institution = ExcelUtils.getCellValueAsString(row.getCell(institutionIdIndex)).trim();
                         String captureTime = ExcelUtils.getCellValueAsString(row.getCell(captureTimeIndex)).trim();
                         String pAge = ExcelUtils.getCellValueAsString(row.getCell(pAgeIndex)).trim();
@@ -183,6 +183,7 @@ public class DuplicationService {
                         // 전체 데이터를 저장
                         Map<String, String> rowData = new HashMap<>();
                         rowData.put("excelFileName", excelFile.getName());
+                        rowData.put("DISEASE_CLASS",diseaseClass);
                         rowData.put("Identifier", imageId);
                         rowData.put("INSTITUTION_ID", institution);
                         rowData.put("CAPTURE_TIME", captureTime);
@@ -262,7 +263,6 @@ public class DuplicationService {
         });
 
         if (jsonFiles == null || jsonFiles.length == 0) {
-            log.warn("지정된 경로에 조건에 맞는 JSON 파일이 없습니다: {} (질환: {}, 기관: {})", jsonFolderPath, diseaseClass, institutionId);
             return duplicateDataList; // 빈 리스트 반환
         }
 
@@ -326,21 +326,49 @@ public class DuplicationService {
                     extractedFields.put("INSTITUTION_ID", Optional.ofNullable(findValueInSections(recordNode, "INSTITUTION_ID"))
                             .map(JsonNode::asText).orElse("N/A"));
 
+                    extractedFields.put("DISEASE_CLASS", Optional.ofNullable(findValueInSections(recordNode, "DISEASE_CLASS"))
+                            .map(JsonNode::asText).orElse("N/A"));
+
                     // CAPTURE_TIME 추출 (Image_info 배열의 첫 번째 요소 탐색)
                     extractedFields.put("CAPTURE_TIME", Optional.ofNullable(findValueInSections(recordNode, "CAPTURE_TIME"))
                             .map(JsonNode::asText).orElse("N/A"));
 
-                    // Identifier 또는 Image_id
-                    JsonNode identifierNode = findValueInSections(recordNode, "Identifier");
-                    JsonNode imageIdNode = findValueInSections(recordNode, "Image_id");
-                    extractedFields.put("Identifier", identifierNode != null ? identifierNode.asText("N/A")
-                            : (imageIdNode != null ? imageIdNode.asText("N/A") : "N/A"));
+// Identifier 또는 Image_id 처리
+                    JsonNode identifierNode = recordNode.get("Identifier");
+                    String identifierValue = null;
+
+// Identifier가 배열인 경우 처리
+                    if (identifierNode != null && identifierNode.isArray()) {
+                        for (JsonNode item : identifierNode) {
+                            JsonNode nestedImageIdNode = item.get("IMAGE_ID");
+                            if (nestedImageIdNode != null) {
+                                identifierValue = nestedImageIdNode.asText(); // 배열 내부의 IMAGE_ID 값 사용
+                                break;
+                            }
+                        }
+                    } else if (identifierNode != null && identifierNode.isTextual()) {
+                        // Identifier가 문자열인 경우 처리
+                        identifierValue = identifierNode.asText();
+                    }
+
+// Image_id도 별도로 처리
+                    JsonNode imageIdNode = recordNode.get("Image_id");
+                    String imageIdValue = (imageIdNode != null) ? imageIdNode.asText() : null;
+
+// Identifier 우선순위에 따라 값 결정
+                    String finalIdentifier = identifierValue != null ? identifierValue :
+                            (imageIdValue != null ? imageIdValue : "N/A");
+
+// 결과 저장
+                    extractedFields.put("Identifier", finalIdentifier);
+
 
                     // Patient_info에서 P_GENDER 및 P_AGE 추출
                     extractedFields.put("P_GENDER", Optional.ofNullable(findValueInSections(recordNode, "P_GENDER"))
                             .map(JsonNode::asText).orElse("N/A"));
                     extractedFields.put("P_AGE", Optional.ofNullable(findValueInSections(recordNode, "P_AGE"))
                             .map(JsonNode::asText).orElse("N/A"));
+
 
                     // 추출된 데이터를 리스트에 추가
                     extractedDataList.add(extractedFields);
@@ -358,6 +386,9 @@ public class DuplicationService {
             List<Map<String, String>> excelData,
             List<Map<String, String>> jsonData
     ) {
+        log.info("{}", excelData);
+        log.info("{}", jsonData);
+
         // 오류 ID를 저장할 리스트
         List<String> mismatchedIds = new ArrayList<>();
 
@@ -382,7 +413,7 @@ public class DuplicationService {
             }
 
             // 비교할 필드 목록
-            List<String> fieldsToCompare = List.of("CAPTURE_TIME", "P_GENDER", "P_AGE", "INSTITUTION_ID");
+            List<String> fieldsToCompare = List.of("DISEASE_CLASS", "CAPTURE_TIME", "P_GENDER", "P_AGE", "INSTITUTION_ID", "P_RES_AREA");
 
             // 필드 값 비교
             boolean hasMismatch = false;
@@ -390,9 +421,17 @@ public class DuplicationService {
                 String excelValue = excelRow.get(field);
                 String jsonValue = jsonRow.get(field);
 
+                // JSON 값이 null 또는 "none"인 경우 빈 문자열로 간주
+                if (excelValue == null || "none".equalsIgnoreCase(excelValue)) {
+                    excelValue = "";
+                }
+
+                // JSON 값이 null 또는 "none"인 경우 빈 문자열로 간주
+                if (jsonValue == null || "none".equalsIgnoreCase(jsonValue)) {
+                    jsonValue = "";
+                }
+
                 if (!Objects.equals(excelValue, jsonValue)) {
-                    log.warn("Mismatch detected for ID {} and File {}: Field {} (Excel: {}, JSON: {})",
-                            id, excelFileName, field, excelValue, jsonValue);
                     hasMismatch = true;
                 }
             }
@@ -405,6 +444,7 @@ public class DuplicationService {
 
         return mismatchedIds; // 오류 Identifier 리스트 반환
     }
+
 
     private JsonNode findValueInSections(JsonNode recordNode, String key) {
         // 최상위에서 값 검색

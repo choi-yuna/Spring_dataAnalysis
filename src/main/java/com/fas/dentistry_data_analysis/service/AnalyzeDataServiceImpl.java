@@ -267,13 +267,12 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
             throw new IllegalArgumentException("폴더 경로가 비어있거나 null입니다.");
         }
 
-        // 폴더가 유효한지 확인
+        // 폴더 유효성 확인
         File folder = new File(folderPath);
         if (!folder.exists() || !folder.isDirectory()) {
             throw new IllegalArgumentException("지정된 경로가 유효하지 않거나 폴더가 아닙니다: " + folderPath);
         }
 
-        String diseaseKeyword = DiseaseClassMap.getOrDefault(diseaseClass, "");
         String institutionKeyword = institutionId == 0 ? "" : InstitutionMap.getOrDefault(String.valueOf(institutionId), "");
 
         Set<String> passIdsSet = new HashSet<>(jsonService.loadPassIdsFromJson("C:/app/id/pass_ids.json"));
@@ -282,7 +281,7 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         // 이미 처리된 파일 추적용 Set
         Set<String> processedFiles = new HashSet<>();
 
-        // 폴더 내의 모든 파일을 병렬로 처리
+        // 병렬 처리
         ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         List<Future<List<Map<String, Map<String, String>>>>> futureResults = new ArrayList<>();
         File[] files = folder.listFiles();
@@ -291,38 +290,40 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         }
 
         for (File file : files) {
-            // 이미 처리된 파일은 건너뜀
             if (!file.isFile() || !processedFiles.add(file.getName())) {
-                continue;
+                continue; // 이미 처리된 파일은 건너뜀
             }
 
-            // 파일 필터링
             String fileName = file.getName();
+
+            // diseaseClass가 0인 경우 파일 이름을 기준으로 diseaseClass 동적으로 설정
+            String dynamicDiseaseClass = "0".equals(diseaseClass) ? determineDiseaseClassFromFile(fileName) : diseaseClass;
+            if (dynamicDiseaseClass.isEmpty()) {
+                continue; // 파일 이름에서 diseaseClass를 설정하지 못한 경우 건너뜀
+            }
+
+            String diseaseKeyword = DiseaseClassMap.getOrDefault(dynamicDiseaseClass, "");
+
+            // 파일 이름과 institutionKeyword로 필터링
             if (!isFileMatchingCriteria(fileName, diseaseKeyword, institutionKeyword)) {
                 continue; // 필터 조건에 맞지 않으면 건너뜀
             }
 
-            // 각 파일을 처리하는 작업을 병렬로 실행
             futureResults.add(executor.submit(() ->
-                    fileProcessor.processServerFile(file, diseaseClass, institutionId,passIdsSet,IdSet)
+                    fileProcessor.processServerFile(file, dynamicDiseaseClass, institutionId, passIdsSet, IdSet)
             ));
         }
+
 
         // 병렬 처리 결과를 결합
         List<Map<String, Map<String, String>>> combinedData = new ArrayList<>();
         for (Future<List<Map<String, Map<String, String>>>> future : futureResults) {
             combinedData.addAll(future.get()); // 결과를 합침
         }
-
         executor.shutdown();
         return combinedData;
     }
 
-    private boolean isFileMatchingCriteria(String fileName, String diseaseKeyword, String institutionKeyword) {
-        boolean matchesDisease = diseaseKeyword.isEmpty() || fileName.contains(diseaseKeyword);
-        boolean matchesInstitution = institutionKeyword.isEmpty() || fileName.contains(institutionKeyword);
-        return matchesDisease && matchesInstitution;
-    }
 
     @Override
     public List<Map<String, Map<String, String>>> analyzeJsonData(String folderPath, String diseaseClass, int institutionId) throws IOException, ExecutionException, InterruptedException {
@@ -336,7 +337,6 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
             throw new IllegalArgumentException("지정된 경로가 유효하지 않거나 폴더가 아닙니다: " + folderPath);
         }
 
-        String diseaseKeyword = DiseaseClassMap.getOrDefault(diseaseClass, "");
         String institutionKeyword = institutionId == 0 ? "" : InstitutionMap.getOrDefault(String.valueOf(institutionId), "");
         // 이미 처리된 파일 추적용 Set
         Set<String> processedFiles = new HashSet<>();
@@ -357,14 +357,22 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
 
             // 파일 필터링
             String fileName = file.getName();
+            // diseaseClass가 0인 경우 파일 이름을 기준으로 diseaseClass 동적으로 설정
+            String dynamicDiseaseClass = "0".equals(diseaseClass) ? determineDiseaseClassFromFile(fileName) : diseaseClass;
+            if (dynamicDiseaseClass.isEmpty()) {
+                continue; // 파일 이름에서 diseaseClass를 설정하지 못한 경우 건너뜀
+            }
+
+            String diseaseKeyword = DiseaseClassMap.getOrDefault(dynamicDiseaseClass, "");
+
+            // 파일 이름과 institutionKeyword로 필터링
             if (!isFileMatchingCriteria(fileName, diseaseKeyword, institutionKeyword)) {
                 continue; // 필터 조건에 맞지 않으면 건너뜀
             }
 
-
             // 각 파일을 처리하는 작업을 병렬로 실행
             futureResults.add(executor.submit(() ->
-                    jsonFileProcessor.processJsonFile(file, diseaseClass, institutionId)
+                    jsonFileProcessor.processJsonFile(file, dynamicDiseaseClass, institutionId)
             ));
         }
 
@@ -377,12 +385,6 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         executor.shutdown();
         return combinedData;
     }
-
-
-
-
-
-
 
 
     @Override
@@ -696,4 +698,27 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         return "기타지역"; // 매핑되지 않으면 원래 이름 반환
     }
 
+    private String determineDiseaseClassFromFile(String fileName) {
+        // 1. 대조군(E)이 포함된 경우 우선 처리
+        if (fileName.contains("대조군")) {
+            return "E";
+        }
+
+        // 2. 다른 질환 키워드 처리
+        for (Map.Entry<String, String> entry : DiseaseClassMap.entrySet()) {
+            if (fileName.contains(entry.getValue())) {
+                return entry.getKey(); // 첫 번째 매칭된 질환 반환
+            }
+        }
+
+        // 3. 매칭되지 않으면 빈 문자열 반환
+        return "";
+    }
+
+
+    private boolean isFileMatchingCriteria(String fileName, String diseaseKeyword, String institutionKeyword) {
+        boolean matchesDisease = diseaseKeyword.isEmpty() || fileName.contains(diseaseKeyword);
+        boolean matchesInstitution = institutionKeyword.isEmpty() || fileName.contains(institutionKeyword);
+        return matchesDisease && matchesInstitution;
+    }
 }
