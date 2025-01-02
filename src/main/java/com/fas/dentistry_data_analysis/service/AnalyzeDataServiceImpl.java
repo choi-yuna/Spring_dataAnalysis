@@ -267,21 +267,16 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
             throw new IllegalArgumentException("폴더 경로가 비어있거나 null입니다.");
         }
 
-        // 폴더 유효성 확인
         File folder = new File(folderPath);
         if (!folder.exists() || !folder.isDirectory()) {
             throw new IllegalArgumentException("지정된 경로가 유효하지 않거나 폴더가 아닙니다: " + folderPath);
         }
 
         String institutionKeyword = institutionId == 0 ? "" : InstitutionMap.getOrDefault(String.valueOf(institutionId), "");
-
         Set<String> passIdsSet = new HashSet<>(jsonService.loadPassIdsFromJson("C:/app/id/pass_ids.json"));
         Set<String> IdSet = new HashSet<>();
-
-        // 이미 처리된 파일 추적용 Set
         Set<String> processedFiles = new HashSet<>();
 
-        // 병렬 처리
         ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         List<Future<List<Map<String, Map<String, String>>>>> futureResults = new ArrayList<>();
         File[] files = folder.listFiles();
@@ -297,12 +292,24 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
             String fileName = file.getName();
 
             // diseaseClass가 0인 경우 파일 이름을 기준으로 diseaseClass 동적으로 설정
-            String dynamicDiseaseClass = "0".equals(diseaseClass) ? determineDiseaseClassFromFile(fileName) : diseaseClass;
-            if (dynamicDiseaseClass.isEmpty()) {
+            String determinedClass = "0".equals(diseaseClass) ? determineDiseaseClassFromFile(fileName) : diseaseClass;
+
+            // 1. 대조군(E) 처리 우선순위
+            if ("0".equals(diseaseClass) && fileName.contains("대조군")) {
+                determinedClass = "E"; // 전체 분석 시 대조군 우선 처리
+            }
+
+            // 2. 현재 diseaseClass가 대조군(E)이 아닌 경우, "대조군" 키워드가 포함된 파일 제외
+            if (!"E".equals(determinedClass) && fileName.contains("대조군")) {
+                continue;
+            }
+
+            if (determinedClass.isEmpty()) {
                 continue; // 파일 이름에서 diseaseClass를 설정하지 못한 경우 건너뜀
             }
 
-            String diseaseKeyword = DiseaseClassMap.getOrDefault(dynamicDiseaseClass, "");
+            String diseaseKeyword = DiseaseClassMap.getOrDefault(determinedClass, "");
+            final String dynamicDiseaseClass = determinedClass; // 람다 표현식에서 사용 가능하도록 final 변수로 설정
 
             // 파일 이름과 institutionKeyword로 필터링
             if (!isFileMatchingCriteria(fileName, diseaseKeyword, institutionKeyword)) {
@@ -314,15 +321,14 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
             ));
         }
 
-
-        // 병렬 처리 결과를 결합
         List<Map<String, Map<String, String>>> combinedData = new ArrayList<>();
         for (Future<List<Map<String, Map<String, String>>>> future : futureResults) {
-            combinedData.addAll(future.get()); // 결과를 합침
+            combinedData.addAll(future.get());
         }
         executor.shutdown();
         return combinedData;
     }
+
 
 
     @Override
@@ -699,15 +705,22 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
     }
 
     private String determineDiseaseClassFromFile(String fileName) {
-        // 1. 대조군(E)이 포함된 경우 우선 처리
-        if (fileName.contains("대조군")) {
-            return "E";
+        // 파일 이름을 여러 구분자로 분리 (언더스코어, 점, 공백, 하이픈 등)
+        String[] parts = fileName.split("[_\\.\\-\\s]+");
+
+        // 1. "대조군"을 가장 먼저 처리
+        for (String part : parts) {
+            if (part.contains("대조군")) {
+                return "E"; // 대조군(E)을 우선 처리
+            }
         }
 
-        // 2. 다른 질환 키워드 처리
+        // 2. 나머지 질환 키워드 처리
         for (Map.Entry<String, String> entry : DiseaseClassMap.entrySet()) {
-            if (fileName.contains(entry.getValue())) {
-                return entry.getKey(); // 첫 번째 매칭된 질환 반환
+            for (String part : parts) {
+                if (part.contains(entry.getValue())) {
+                    return entry.getKey(); // 첫 번째 매칭된 질환 반환
+                }
             }
         }
 

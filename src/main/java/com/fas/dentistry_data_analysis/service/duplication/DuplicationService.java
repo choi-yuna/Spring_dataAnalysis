@@ -386,8 +386,6 @@ public class DuplicationService {
             List<Map<String, String>> excelData,
             List<Map<String, String>> jsonData
     ) {
-        log.info("{}", excelData);
-        log.info("{}", jsonData);
 
         // 오류 ID를 저장할 리스트
         List<String> mismatchedIds = new ArrayList<>();
