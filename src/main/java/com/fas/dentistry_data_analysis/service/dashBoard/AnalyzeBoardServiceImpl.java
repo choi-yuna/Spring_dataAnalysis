@@ -209,7 +209,6 @@ public class AnalyzeBoardServiceImpl {
             if (!jsonFileSet.add(jsonFile)) { // 이미 추가된 파일이라면 중복으로 간주
                 if (!duplicates.contains(jsonFile)) {
                     duplicates.add(jsonFile); // 중복 목록에 추가
-                    log.info("Duplicate JSON file detected: {} in {}", jsonFile, institutionDiseaseKey);
                 }
             }
         }
