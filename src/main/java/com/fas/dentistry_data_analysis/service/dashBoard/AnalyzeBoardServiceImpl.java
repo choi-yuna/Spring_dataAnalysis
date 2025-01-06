@@ -23,15 +23,15 @@ import java.util.stream.Collectors;
 @Service
 public class AnalyzeBoardServiceImpl {
     //원광대 서버 정보
-//    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
-//    private static final int SFTP_PORT = 2024;  // SFTP 포트
-//    private static final String SFTP_USER = "master01";  // 사용자 계정
-//    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
+    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
+    private static final int SFTP_PORT = 2024;  // SFTP 포트
+    private static final String SFTP_USER = "master01";  // 사용자 계정
+    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
     // SFTP 서버 정보
-    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
-    private static final int SFTP_PORT = 22;  // SFTP 포트
-    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
-    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
+//    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
+//    private static final int SFTP_PORT = 22;  // SFTP 포트
+//    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
+//    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
 
     private final JSONService jsonService;
     private final TotalDataGropedService totalDataGropedService;
@@ -40,7 +40,6 @@ public class AnalyzeBoardServiceImpl {
     private final StorageConfig storageConfig;
     private final AtomicBoolean refreshInProgress = new AtomicBoolean(false);
 
-    private static final List<String> DISEASE_FOLDER_NAMES = Arrays.asList("골수염", "치주질환", "구강암","두개안면기형","대조군");
     private static final List<String> INSTITUTION_FOLDER_NAMES = Arrays.asList("서울대", "보라매병원", "조선대","원광대","단국대","고려대","국립암센터");
     // 기관-질환별 JSON 파일 목록 관리
     private final Map<String, Set<String>> institutionDiseaseJsonFiles = new HashMap<>();
@@ -277,8 +276,8 @@ public class AnalyzeBoardServiceImpl {
         // 특정 질환 폴더에 독립적으로 저장
         if (isExcelFileProcessed && targetDiseaseFolder != null) {
             log.info("Saving results independently to target disease folder: {}", targetDiseaseFolder);
-            jsonService.saveResultsToJsonSftp(targetDiseaseFolder, folderResultList, channelSftp);
-            jsonService.saveResultsToJsonSftp(targetDiseaseFolder, folderErrorList, channelSftp);// **독립된 리스트 저장**
+            jsonService.saveResultsToJsonSftp("/내부 데이터", folderResultList, channelSftp);
+            jsonService.saveResultsToJsonSftp("/내부 데이터", folderErrorList, channelSftp);// **독립된 리스트 저장**
         } else if (isExcelFileProcessed) {
             jsonService.saveResultsToJsonSftp(folderPath, folderResultList, channelSftp);
             jsonService.saveResultsToJsonSftp(folderPath, folderErrorList, channelSftp);
@@ -437,7 +436,7 @@ public class AnalyzeBoardServiceImpl {
         int metaCount = 0;
         int drawingCount = 0;
 
-        for (String imageId : newUniqueIds) {
+        for (String imageId : fileImageIds) {
             // DCM 파일 중복 확인
             if (!uniqueDcmFiles.contains(imageId)) {
                 boolean dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm", "");
@@ -529,7 +528,7 @@ public class AnalyzeBoardServiceImpl {
 
             // 라벨링 PASS 건수 계산 (하위 폴더 이름을 IMAGE_ID와 비교)
             for (String subFolderName : subFolderNames) {
-                Optional<String> matchedImageId = newUniqueIds.stream()
+                Optional<String> matchedImageId = fileImageIds.stream()
                         .filter(imageId -> subFolderName.contains(imageId))
                         .findFirst();
 
@@ -552,7 +551,7 @@ public class AnalyzeBoardServiceImpl {
             }
 
     // 엑셀 파일에서 추출된 IMAGE_ID와 JSON에서 얻은 DISEASE_CLASS, INSTITUTION_ID를 매핑하여 처리
-        for (String imageId : newUniqueIds) {
+        for (String imageId : fileImageIds) {
 
             // 파일 존재 여부를 확인하는 부분 (치주질환 폴더 확인)
             boolean dcmExists = false;
