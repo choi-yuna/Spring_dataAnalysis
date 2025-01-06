@@ -4,7 +4,6 @@ import com.fas.dentistry_data_analysis.config.StorageConfig;
 import com.fas.dentistry_data_analysis.service.FolderFileCacheManager;
 import com.fas.dentistry_data_analysis.service.Json.JSONService;
 import com.fas.dentistry_data_analysis.util.SFTPClient;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -24,15 +23,15 @@ import java.util.stream.Collectors;
 @Service
 public class AnalyzeBoardServiceImpl {
     //원광대 서버 정보
-    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
-    private static final int SFTP_PORT = 2024;  // SFTP 포트
-    private static final String SFTP_USER = "master01";  // 사용자 계정
-    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
+//    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
+//    private static final int SFTP_PORT = 2024;  // SFTP 포트
+//    private static final String SFTP_USER = "master01";  // 사용자 계정
+//    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
     // SFTP 서버 정보
-//    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
-//    private static final int SFTP_PORT = 22;  // SFTP 포트
-//    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
-//    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
+    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
+    private static final int SFTP_PORT = 22;  // SFTP 포트
+    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
+    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
 
     private final JSONService jsonService;
     private final TotalDataGropedService totalDataGropedService;
@@ -181,6 +180,7 @@ public class AnalyzeBoardServiceImpl {
         }
 
 
+
         // 기관 및 질환 정보 추출
         String institutionId = extractInstitutionId(folderPath);
         String diseaseClass = extractDiseaseClass(folderPath);
@@ -214,7 +214,7 @@ public class AnalyzeBoardServiceImpl {
             }
         }
 
-        String targetDiseaseFolder = getTargetDiseaseFolder(folderPath);
+        String targetDiseaseFolder = getTargetInstitutionFolder(folderPath);
 
         // JSON 파일 존재 여부 확인
         String jsonFilePath = targetDiseaseFolder != null ? targetDiseaseFolder + "/analysis_result.json"
@@ -247,7 +247,7 @@ public class AnalyzeBoardServiceImpl {
         boolean isExcelFileProcessed = false;
 
         int availableCores = Runtime.getRuntime().availableProcessors();
-        ExecutorService executorService = Executors.newFixedThreadPool(availableCores);
+        ExecutorService executorService = Executors.newFixedThreadPool(availableCores * 2);
         List<CompletableFuture<Void>> futures = new ArrayList<>();
         AtomicBoolean stopSubfolderSearch = new AtomicBoolean(false);
 
@@ -290,6 +290,11 @@ public class AnalyzeBoardServiceImpl {
         if (!stopSubfolderSearch.get()) {
             for (ChannelSftp.LsEntry entry : files) {
                 if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
+                    if (folderPath.endsWith("/Labelling/Labelling") || folderPath.endsWith("\\Labelling\\Labelling")) {
+                        log.info("Skipping folder: {}", folderPath);
+                        continue;
+                    }
+
                     String subFolderPath = folderPath + "/" + entry.getFilename();
                     processFolderRecursively(channelSftp, subFolderPath, resultList, errorList,processedImageIds, refresh,passIds,duplicateJsonFiles);
                 }
@@ -298,10 +303,12 @@ public class AnalyzeBoardServiceImpl {
 
         executorService.shutdown();
     }
-    private String getTargetDiseaseFolder(String folderPath) {
-        for (String disease : DISEASE_FOLDER_NAMES) {
-            if (folderPath.contains(disease)) {
-                return folderPath.substring(0, folderPath.indexOf(disease) + disease.length());
+
+
+    private String getTargetInstitutionFolder(String folderPath) {
+        for (String institution : INSTITUTION_FOLDER_NAMES) {
+            if (folderPath.contains(institution)) {
+                return folderPath.substring(0, folderPath.indexOf(institution) + institution.length());
             }
         }
         return null; // 포함되지 않는 경우
@@ -340,8 +347,6 @@ public class AnalyzeBoardServiceImpl {
         return false;
     }
 
-
-    //질환별 폴더 확인 로직
     // 질환별 폴더 확인 로직
     private void processFile(ChannelSftp channelSftp, String folderPath, String fileName,
                              List<Map<String, Object>> resultList, List<Map<String, Object>> errorList, Set<String> processedImageIds,
@@ -406,11 +411,22 @@ public class AnalyzeBoardServiceImpl {
                     .collect(Collectors.toSet());
         });
 
-        Set<String> imageIdsFromExcel = filteredData.stream()
+        // 현재 파일의 고유 ID 추출
+        Set<String> fileImageIds = filteredData.stream()
                 .map(row -> (String) row.get("IMAGE_ID"))
+                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
-        processedImageIds.addAll(imageIdsFromExcel);
+        // 전체 중복 제거를 고려한 고유 ID 계산
+        Set<String> newUniqueIds = new HashSet<>();
+        synchronized (processedImageIds) {
+            for (String imageId : fileImageIds) {
+                if (!processedImageIds.contains(imageId)) {
+                    newUniqueIds.add(imageId); // 전역 Set에 없는 경우 추가
+                    processedImageIds.add(imageId); // 전역 Set 업데이트
+                }
+            }
+        }
 
         // 중복 제거를 위한 Set
         Set<String> uniqueDcmFiles = new HashSet<>();
@@ -421,7 +437,7 @@ public class AnalyzeBoardServiceImpl {
         int metaCount = 0;
         int drawingCount = 0;
 
-        for (String imageId : imageIdsFromExcel) {
+        for (String imageId : newUniqueIds) {
             // DCM 파일 중복 확인
             if (!uniqueDcmFiles.contains(imageId)) {
                 boolean dcmExists = checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".dcm", "");
@@ -452,18 +468,18 @@ public class AnalyzeBoardServiceImpl {
 
         // 결과 업데이트
         if (folderPath.contains("치주질환")) {
-            incrementStatus(resultList, institutionId, diseaseClass, null, "임상", imageIdsFromExcel.size());
+            incrementStatus(resultList, institutionId, diseaseClass, null, "임상", newUniqueIds.size());
             incrementStatus(resultList, institutionId, diseaseClass, null, "영상", dcmExistsCount);
             incrementStatus(resultList, institutionId, diseaseClass, null, "메타", metaCount);
         } else if (folderPath.contains("두개안면")) {
             dcmExistsCount = countFilteredFoldersInPath(channelSftp, folderPath, "_");
-            incrementStatus(resultList, institutionId, diseaseClass, null, "임상", imageIdsFromExcel.size());
+            incrementStatus(resultList, institutionId, diseaseClass, null, "임상", newUniqueIds.size());
             incrementStatus(resultList, institutionId, diseaseClass, null, "영상", dcmExistsCount);
             incrementStatus(resultList, institutionId, diseaseClass, null, "메타", metaCount);
         }  else if (folderPath.contains("대조군")) {
             dcmExistsCount = countFilteredFoldersInPath(channelSftp, folderPath, "_");
 
-            incrementStatus(resultList, institutionId, diseaseClass, "대조군", "임상", imageIdsFromExcel.size());
+            incrementStatus(resultList, institutionId, diseaseClass, "대조군", "임상", newUniqueIds.size());
             incrementStatus(resultList, institutionId, diseaseClass, "대조군", "영상", dcmExistsCount);
             folderFileCacheManager.clearCache();
 
@@ -513,7 +529,7 @@ public class AnalyzeBoardServiceImpl {
 
             // 라벨링 PASS 건수 계산 (하위 폴더 이름을 IMAGE_ID와 비교)
             for (String subFolderName : subFolderNames) {
-                Optional<String> matchedImageId = imageIdsFromExcel.stream()
+                Optional<String> matchedImageId = newUniqueIds.stream()
                         .filter(imageId -> subFolderName.contains(imageId))
                         .findFirst();
 
@@ -530,22 +546,13 @@ public class AnalyzeBoardServiceImpl {
 
             } else {
                 int filteredFoldersCount = countFilteredFoldersInPath(channelSftp, folderPath, "_");
-                incrementStatus(resultList, institutionId, diseaseClass, null, "임상", imageIdsFromExcel.size());
+                incrementStatus(resultList, institutionId, diseaseClass, null, "임상", newUniqueIds.size());
                 incrementStatus(resultList, institutionId, diseaseClass, null, "영상", filteredFoldersCount);
                 incrementStatus(resultList, institutionId, diseaseClass, null, "메타", metaCount);
             }
 
-
     // 엑셀 파일에서 추출된 IMAGE_ID와 JSON에서 얻은 DISEASE_CLASS, INSTITUTION_ID를 매핑하여 처리
-        for (String imageId : imageIdsFromExcel) {
-
-            // 엑셀 파일에서 IMAGE_ID가 JSON 파일에 포함된 경우 처리
-//            if (imageIdsFromExcel.contains(imageId)) {
-//                boolean jsonExists = jsonFiles.stream().anyMatch(name -> name.contains(imageId));
-//                if (!jsonExists) {
-//                    continue;
-//                }
-//            }
+        for (String imageId : newUniqueIds) {
 
             // 파일 존재 여부를 확인하는 부분 (치주질환 폴더 확인)
             boolean dcmExists = false;
@@ -673,7 +680,6 @@ public class AnalyzeBoardServiceImpl {
                 return Collections.emptySet();
             }
         });
-
 
         // 폴더 이름 중 imageId를 포함하는 폴더 찾기
         Optional<String> matchingFolder = cachedFolders.stream()
@@ -896,10 +902,6 @@ public class AnalyzeBoardServiceImpl {
         return (int) count; // 갯수 반환
     }
 
-
-
-    // private final Map<String, Set<String>> folderFileCache = new ConcurrentHashMap<>();
-
     private boolean checkFileExistsInSFTP(ChannelSftp channelSftp, String folderPath, String fileName, String subFolder) throws SftpException {
         // 폴더와 서브폴더 경로 결합
         String targetPath = folderPath + subFolder;
@@ -925,67 +927,4 @@ public class AnalyzeBoardServiceImpl {
         // 캐시된 파일 목록에서 해당 파일이 있는지 확인
         return cachedFiles.contains(fileName);
     }
-
-
-
-    // JOSN 상태확인 키 확인
-    private int getJsonStatus(JsonNode rootNode, String key) {
-        // 각 key에 대한 변형된 키들을 처리
-        String[] possibleKeys = getPossibleKeysForKey(key);
-
-        // 각 key 이름 변형에 대해 한 번만 처리
-        for (String possibleKey : possibleKeys) {
-            JsonNode infoNode = rootNode.get(possibleKey);
-            if (infoNode != null && infoNode.isArray() && infoNode.size() > 0) {
-                JsonNode firstElement = infoNode.get(0);
-
-                // 상태 확인을 위한 키들
-                JsonNode statusNode = getField(firstElement, "Labelling", "Labeling");
-                JsonNode firstCheckNode = getField(firstElement, "Checking1", "Checking_1");
-                JsonNode secondCheckNode = getField(firstElement, "Checking2", "Checking_2");
-
-                // Labeling 상태 확인 (statusNode가 null이면 0 반환)
-                if (statusNode != null && (statusNode.asText().equals("2") || statusNode.asText().equals("완료"))) {
-                    return 2;
-                }
-
-                // First_Check 상태 확인 (firstCheckNode가 null이면 0 반환)
-                if (firstCheckNode != null && firstCheckNode.asText().equals("2")) {
-                    return 2;
-                }
-
-                // Second_Check 상태 확인 (secondCheckNode가 null이면 0 반환)
-                if (secondCheckNode != null && secondCheckNode.asText().equals("2")) {
-                    return 2;
-                }
-            }
-        }
-
-        return 0; // 모든 조건을 만족하지 않으면 0 반환
-    }
-
-    // key에 따라 두 가지 필드를 반환하는 메서드
-    private JsonNode getField(JsonNode node, String key1, String key2) {
-        JsonNode fieldNode = node.get(key1);
-        if (fieldNode == null) {
-            fieldNode = node.get(key2); // 두 번째 키가 있으면 반환
-        }
-        return fieldNode; // 첫 번째 키가 없으면 두 번째 키를 반환
-    }
-
-
-    private String[] getPossibleKeysForKey(String key) {
-        // 각 key에 대해 가능한 이름 변형을 반환
-        switch (key) {
-            case "Labeling_Info":
-                return new String[]{"Labeling_Info", "Labeling_info"};
-            case "First_Check_Info":
-                return new String[]{"First_Check_Info", "First_Check_info"};
-            case "Second_Check_Info":
-                return new String[]{"Second_Check_Info", "Second_Check_info"};
-            default:
-                return new String[]{key};  // 기본적으로 동일한 이름 사용
-        }
-    }
-
 }
