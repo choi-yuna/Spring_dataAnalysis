@@ -523,7 +523,6 @@ public class DuplicationService {
         Map<String, Object> result = new HashMap<>();
         result.put("CRF", crfIds);
         result.put("JSON ", jsonFiles);
-        result.put("JSON 오류 파일", errorJson);
 
         return result;
     }
