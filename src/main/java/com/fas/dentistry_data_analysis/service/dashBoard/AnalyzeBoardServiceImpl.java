@@ -42,6 +42,7 @@ public class AnalyzeBoardServiceImpl {
     private final AtomicBoolean refreshInProgress = new AtomicBoolean(false);
 
     private static final List<String> DISEASE_FOLDER_NAMES = Arrays.asList("골수염", "치주질환", "구강암","두개안면기형","대조군");
+    private static final List<String> INSTITUTION_FOLDER_NAMES = Arrays.asList("서울대", "보라매병원", "조선대","원광대","단국대","고려대","국립암센터");
     // 기관-질환별 JSON 파일 목록 관리
     private final Map<String, Set<String>> institutionDiseaseJsonFiles = new HashMap<>();
 
@@ -458,6 +459,7 @@ public class AnalyzeBoardServiceImpl {
             dcmExistsCount = countFilteredFoldersInPath(channelSftp, folderPath, "_");
             incrementStatus(resultList, institutionId, diseaseClass, null, "임상", imageIdsFromExcel.size());
             incrementStatus(resultList, institutionId, diseaseClass, null, "영상", dcmExistsCount);
+            incrementStatus(resultList, institutionId, diseaseClass, null, "메타", metaCount);
         }  else if (folderPath.contains("대조군")) {
             dcmExistsCount = countFilteredFoldersInPath(channelSftp, folderPath, "_");
 
@@ -516,9 +518,11 @@ public class AnalyzeBoardServiceImpl {
                         .findFirst();
 
                 if (matchedImageId.isPresent()) {
-                    passIds.add(matchedImageId.get()); // Pass된 ID 저장
-                    incrementStatus(resultList, institutionId, diseaseClass, "대조군", "drawing", null);
-                    incrementStatus(resultList, institutionId, diseaseClass, "대조군", "라벨링pass건수", null);
+                    if (!passIds.contains(matchedImageId.get())) {
+                        passIds.add(matchedImageId.get()); // Pass된 ID 저장
+                        incrementStatus(resultList, institutionId, diseaseClass, "대조군", "drawing", null);
+                        incrementStatus(resultList, institutionId, diseaseClass, "대조군", "라벨링pass건수", null);
+                    }
                 }
             }
             stopSubfolderSearch.set(true); // 대조군은 하위 폴더 탐색 중지
@@ -573,11 +577,13 @@ public class AnalyzeBoardServiceImpl {
                 }
                 if(jsonExists) {
                     if ((dcmExists && iniExists && alveExists)) {
-                        passIds.add(imageId);
-                        processJsonFile(channelSftp, folderPath,imageId,institutionId,diseaseClass,newFileName);
-                        incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);
-                        //processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
-                        stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
+                        if (!passIds.contains(imageId)) {
+                            passIds.add(imageId);
+                            processJsonFile(channelSftp, folderPath, imageId, institutionId, diseaseClass, newFileName);
+                            incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수", null);
+                            //processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
+                            stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
+                        }
                     } else {
                         errorDataStatus(errorList, institutionId, diseaseClass, imageId,jsonExists,dcmExists,iniExists,alveExists);
                         stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
@@ -596,10 +602,13 @@ public class AnalyzeBoardServiceImpl {
                     try (InputStream jsonInputStream = SFTPClient.readFile(channelSftp, folderPath+"/Labelling", imageId + ".json")) {
                         // JSON 데이터 처리
                         labellingExists = processJsonInputStream(jsonInputStream);
-                        if(labellingExists && dcmExists){
-                            passIds.add(imageId);
-                            processJsonFile(channelSftp, folderPath,imageId,institutionId,diseaseClass,newFileName);
-                            incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);}
+                        if(labellingExists && dcmExists) {
+                            if (!passIds.contains(imageId)) {  // 중복 체크
+                                passIds.add(imageId);
+                                processJsonFile(channelSftp, folderPath, imageId, institutionId, diseaseClass, newFileName);
+                                incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수", null);
+                            }
+                        }
                         else{
                             errorDataStatus(errorList, institutionId, diseaseClass, imageId,jsonExists,dcmExists,false,false);
                         }  // 이 시점에서 하위 폴더 탐색을 중지
@@ -625,11 +634,13 @@ public class AnalyzeBoardServiceImpl {
                 if (jsonExists && dcmExists) {
                     incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링등록건수",null);
                     if ((labellingExists && iniExists)) {
-                        passIds.add(imageId);
-                        processJsonFile(channelSftp, folderPath,imageId,institutionId,diseaseClass,newFileName);
-                        incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수",null);
-                        //processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
-                        stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
+                        if (!passIds.contains(imageId)) {
+                            passIds.add(imageId);
+                            processJsonFile(channelSftp, folderPath, imageId, institutionId, diseaseClass, newFileName);
+                            incrementStatus(resultList, institutionId, diseaseClass, null, "라벨링pass건수", null);
+                            //processJsonFile(channelSftp, folderPath, imageId, resultList, institutionId, diseaseClass);
+                            stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
+                        }
                     } else {
                         errorDataStatus(errorList, institutionId, diseaseClass, imageId,jsonExists,dcmExists,iniExists,labellingExists);
                         stopSubfolderSearch.set(true);  // 이 시점에서 하위 폴더 탐색을 중지
