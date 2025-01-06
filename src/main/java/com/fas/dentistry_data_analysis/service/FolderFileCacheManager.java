@@ -21,11 +21,6 @@ public class FolderFileCacheManager {
         });
     }
 
-    // 캐시된 데이터 확인
-    public boolean isCached(String path) {
-        return folderFileCache.containsKey(path);
-    }
-
     // 특정 경로에 캐시된 데이터 가져오기
     public Set<String> getCachedFiles(String path) {
         return folderFileCache.getOrDefault(path, Collections.emptySet());
