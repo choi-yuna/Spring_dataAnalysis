@@ -1,5 +1,6 @@
 package com.fas.dentistry_data_analysis.service.dashBoard;
 
+import com.fas.dentistry_data_analysis.config.SftpConfig;
 import com.fas.dentistry_data_analysis.config.StorageConfig;
 import com.fas.dentistry_data_analysis.service.FolderFileCacheManager;
 import com.fas.dentistry_data_analysis.service.Json.JSONService;
@@ -22,22 +23,14 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class AnalyzeBoardServiceImpl {
-    //원광대 서버 정보
-    private static final String SFTP_HOST = "210.126.75.11";  // SFTP 서버 IP
-    private static final int SFTP_PORT = 2024;  // SFTP 포트
-    private static final String SFTP_USER = "master01";  // 사용자 계정
-    private static final String SFTP_PASSWORD = "Master01!!!";  // 비밀번호
-    // SFTP 서버 정보
-//    private static final String SFTP_HOST = "202.86.11.27";  // SFTP 서버 IP
-//    private static final int SFTP_PORT = 22;  // SFTP 포트
-//    private static final String SFTP_USER = "dent_fas";  // 사용자 계정
-//    private static final String SFTP_PASSWORD = "dent_fas123";  // 비밀번호
 
     private final JSONService jsonService;
     private final TotalDataGropedService totalDataGropedService;
     private final ExcelService excelService;
     private final FolderFileCacheManager folderFileCacheManager;
     private final StorageConfig storageConfig;
+    private final SftpConfig sftpConfig;
+
     private final AtomicBoolean refreshInProgress = new AtomicBoolean(false);
 
     private static final List<String> INSTITUTION_FOLDER_NAMES = Arrays.asList("서울대", "보라매병원", "조선대","원광대","단국대","고려대","국립암센터");
@@ -45,12 +38,13 @@ public class AnalyzeBoardServiceImpl {
     private final Map<String, Set<String>> institutionDiseaseJsonFiles = new HashMap<>();
 
 
-    public AnalyzeBoardServiceImpl(JSONService jsonService, ExcelService excelService, TotalDataGropedService totalDataGropedService,FolderFileCacheManager folderFileCacheManager, StorageConfig storageConfig) {
+    public AnalyzeBoardServiceImpl(JSONService jsonService, ExcelService excelService, TotalDataGropedService totalDataGropedService,FolderFileCacheManager folderFileCacheManager, StorageConfig storageConfig, SftpConfig sftpConfig) {
         this.jsonService = jsonService;
         this.excelService = excelService;
         this.totalDataGropedService = totalDataGropedService;
         this.folderFileCacheManager = folderFileCacheManager;
         this.storageConfig = storageConfig;
+        this.sftpConfig = sftpConfig;
     }
 
     public boolean isRefreshInProgress() {
@@ -77,7 +71,7 @@ public class AnalyzeBoardServiceImpl {
 
         try {
 
-            session = SFTPClient.createSession(SFTP_HOST, SFTP_USER, SFTP_PASSWORD, SFTP_PORT);
+            session = SFTPClient.createSession(sftpConfig.getHost(), sftpConfig.getUser(), sftpConfig.getPassword(), sftpConfig.getPort());
             channelSftp = SFTPClient.createSftpChannel(session);
 
             if(refresh) {
@@ -534,7 +528,6 @@ public class AnalyzeBoardServiceImpl {
 
 
                 if (matchedImageId.isPresent()) {
-                    log.info("subFolderName {}",matchedImageId.get());
                     if (!passIds.contains(matchedImageId.get())) {
                         passIds.add(matchedImageId.get()); // Pass된 ID 저장
                         incrementStatus(resultList, institutionId, diseaseClass, "대조군", "drawing", null);
