@@ -108,7 +108,12 @@ public class ExcelService {
                     if (DateUtil.isCellDateFormatted(cell)) {
                         return cell.getDateCellValue().toString(); // 날짜인 경우 처리
                     }
-                    return String.valueOf(cell.getNumericCellValue());
+                    double numericValue = cell.getNumericCellValue();
+                    // 정수인지 확인 후 변환
+                    if (numericValue == Math.floor(numericValue)) {
+                        return String.valueOf((long) numericValue); // 정수로 반환
+                    }
+                    return String.valueOf(numericValue); // 소수점 있는 경우 그대로 반환
                 case BOOLEAN:
                     return String.valueOf(cell.getBooleanCellValue());
                 case FORMULA:

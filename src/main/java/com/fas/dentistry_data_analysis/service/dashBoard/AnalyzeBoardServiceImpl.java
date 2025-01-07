@@ -75,16 +75,18 @@ public class AnalyzeBoardServiceImpl {
         ChannelSftp channelSftp = null;
         Set<String> processedImageIds = new HashSet<>();  // 중복 처리용 전역 Set
 
-        if(refresh) {
-            jsonService.deleteExistingExcelFiles("C:/app/dentistry",".xlsx");
-            jsonService.deleteExistingExcelFiles("C:/app/id",".json");
-            jsonService.deleteExistingExcelFiles("C:/app/disease_json", ".json"); // JSON 저장 폴더 초기화
-            jsonService.deleteExistingExcelFiles("C:/app/error_json", ".json"); // JSON 저장 폴더 초기화
-        }
-
         try {
+
             session = SFTPClient.createSession(SFTP_HOST, SFTP_USER, SFTP_PASSWORD, SFTP_PORT);
             channelSftp = SFTPClient.createSftpChannel(session);
+
+            if(refresh) {
+                jsonService.deleteExistingExcelFiles("C:/app/dentistry",".xlsx");
+                jsonService.deleteExistingExcelFiles("C:/app/id",".json");
+                jsonService.deleteExistingExcelFiles("C:/app/disease_json", ".json"); // JSON 저장 폴더 초기화
+                jsonService.deleteExistingExcelFiles("C:/app/error_json", ".json"); // JSON 저장 폴더 초기화
+                SFTPClient.deleteFile(channelSftp, "/내부 데이터/analysis_result.json");
+            }
 
             // 폴더 내 파일을 병렬로 처리
             processFolderRecursively(channelSftp, folderPath, resultList, errorList, processedImageIds, refresh, passIds,duplicateJsonFiles);
@@ -476,10 +478,8 @@ public class AnalyzeBoardServiceImpl {
             incrementStatus(resultList, institutionId, diseaseClass, null, "영상", dcmExistsCount);
             incrementStatus(resultList, institutionId, diseaseClass, null, "메타", metaCount);
         }  else if (folderPath.contains("대조군")) {
-            dcmExistsCount = countFilteredFoldersInPath(channelSftp, folderPath, "_");
 
             incrementStatus(resultList, institutionId, diseaseClass, "대조군", "임상", newUniqueIds.size());
-            incrementStatus(resultList, institutionId, diseaseClass, "대조군", "영상", dcmExistsCount);
             folderFileCacheManager.clearCache();
 
             Set<String> subFolderNames = folderFileCacheManager.computeIfAbsent(folderPath, path -> {
@@ -523,16 +523,18 @@ public class AnalyzeBoardServiceImpl {
             });
 
             // 데이터 등록 건수 설정 (하위 폴더 수)
-            incrementStatus(resultList, institutionId, diseaseClass, "대조군", "라벨링등록건수", subFolderNames.size());
+            incrementStatus(resultList, institutionId, diseaseClass, "대조군", "영상", subFolderNames.size());
             incrementStatus(resultList, institutionId, diseaseClass, "대조군", "메타", subFolderNames.size());
 
             // 라벨링 PASS 건수 계산 (하위 폴더 이름을 IMAGE_ID와 비교)
             for (String subFolderName : subFolderNames) {
                 Optional<String> matchedImageId = fileImageIds.stream()
-                        .filter(imageId -> subFolderName.contains(imageId))
+                        .filter(imageId -> subFolderName.matches(".*\\b" + imageId + "\\b.*")) // 정규식을 사용하여 정확히 매칭
                         .findFirst();
 
+
                 if (matchedImageId.isPresent()) {
+                    log.info("subFolderName {}",matchedImageId.get());
                     if (!passIds.contains(matchedImageId.get())) {
                         passIds.add(matchedImageId.get()); // Pass된 ID 저장
                         incrementStatus(resultList, institutionId, diseaseClass, "대조군", "drawing", null);
