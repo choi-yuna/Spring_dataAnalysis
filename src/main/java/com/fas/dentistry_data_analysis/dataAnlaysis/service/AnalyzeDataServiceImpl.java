@@ -22,6 +22,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.fas.dentistry_data_analysis.dataAnlaysis.util.excel.ExcelUtils.getCellValueAsString;
 
@@ -384,18 +385,15 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         for (Future<List<Map<String, Map<String, String>>>> future : futureResults) {
             combinedData.addAll(future.get()); // 결과를 합침
         }
-
         executor.shutdown();
         return combinedData;
     }
 
-
     @Override
     public List<Map<String, Object>> analyzeFolderDataWithFilters(String folderPath, Map<String, String> filterConditions, List<String> headers) throws IOException {
-        if (folderPath == null ) {
+        if (folderPath == null) {
             throw new IllegalArgumentException("파일 ID 목록이 비어있거나 null입니다.");
         }
-
 
         // 폴더가 유효한지 확인
         File folder = new File(folderPath);
@@ -403,8 +401,9 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
             throw new IllegalArgumentException("지정된 경로가 유효하지 않거나 폴더가 아닙니다: " + folderPath);
         }
 
-        // 이미 처리된 파일 추적용 Set
-        Set<String> processedFiles = new HashSet<>();
+        // passIdsSet 로드
+        Set<String> passIdsSet = new HashSet<>(jsonService.loadPassIdsFromJson("C:/app/id/pass_ids.json"));
+        Set<String> processedIds = new HashSet<>();
 
         // 폴더 내의 모든 파일을 병렬로 처리
         File[] files = folder.listFiles();
@@ -413,8 +412,8 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         ExecutorService executor = Executors.newCachedThreadPool();
 
         try {
-                // 비동기 파일 처리
-                List<Future<List<Map<String, String>>>> futures = new ArrayList<>();
+            // 비동기 파일 처리
+            List<Future<List<Map<String, String>>>> futures = new ArrayList<>();
             for (File file : files) {
                 futures.add(executor.submit(() -> {
                     if (folderPath == null) {
@@ -424,139 +423,116 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
                     if ("All".equals(fileFilterConditions.get("DISEASE_CLASS"))) {
                         fileFilterConditions.remove("DISEASE_CLASS");
                     }
-                    return processFileWithFilters(file, fileFilterConditions, headers);
+                    List<Map<String, String>> fileData = processFolderFileWithFilters(file, fileFilterConditions, headers,passIdsSet,processedIds);
+                    return fileData;
                 }));
-                }
+            }
 
-                // 결과 처리
-                for (String header : headers) {
-                    if ("Tooth".equals(header)) {
-                        // Tooth 필드 요약 처리
-                        Map<String, Object> result = new HashMap<>();
-                        result.put("headers", Arrays.asList("치아 상태", "개수"));
-                        result.put("id", "Tooth");
-                        result.put("title", "치아 상태 요약");
+            // 기존 헤더 기반 로직 처리
+            for (String header : headers) {
+                if ("Tooth".equals(header)) {
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("headers", Arrays.asList("치아 상태", "개수"));
+                    result.put("id", "Tooth");
+                    result.put("title", "치아 상태 요약");
 
-                        // 치아 상태 빈도수 계산
-                        int implantCount = 0;
-                        int prosthesisCount = 0;
-                        int normalCount = 0;
-                        int bridgeCount = 0;
-                        int otherCount = 0;
+                    // 치아 상태 빈도수 계산
+                    int implantCount = 0;
+                    int prosthesisCount = 0;
+                    int normalCount = 0;
+                    int bridgeCount = 0;
+                    int otherCount = 0;
 
-                        for (Future<List<Map<String, String>>> future : futures) {
-                            List<Map<String, String>> fileData = future.get();
+                    for (Future<List<Map<String, String>>> future : futures) {
+                        List<Map<String, String>> fileData = future.get();
 
-                            for (Map<String, String> rowData : fileData) {
-                                for (Map.Entry<String, String> entry : rowData.entrySet()) {
-                                    String key = entry.getKey();
-                                    String value = entry.getValue().trim();
+                        for (Map<String, String> rowData : fileData) {
+                            for (Map.Entry<String, String> entry : rowData.entrySet()) {
+                                String key = entry.getKey();
+                                String value = entry.getValue().trim();
 
-                                    if (key.startsWith("Tooth_")) {
-                                        switch (value) {
-                                            case "1":  // 정상
-                                                normalCount++;
-                                                break;
-                                            case "2":  // 보철
-                                                prosthesisCount++;
-                                                break;
-                                            case "3":  // 임플란트
-                                                implantCount++;
-                                                break;
-                                            case "4":  // 브릿지
-                                                bridgeCount++;
-                                                break;
-                                            case "5":
-                                            case "6":  // 기타
-                                                otherCount++;
-                                                break;
-                                        }
+                                if (key.startsWith("Tooth_")) {
+                                    switch (value) {
+                                        case "1": normalCount++; break;
+                                        case "2": prosthesisCount++; break;
+                                        case "3": implantCount++; break;
+                                        case "4": bridgeCount++; break;
+                                        case "5": case "6": otherCount++; break;
                                     }
                                 }
                             }
                         }
-
-                        // 결과 저장
-                        List<Map<String, Object>> rows = new ArrayList<>();
-                        rows.add(Map.of("value", "정상", "count", normalCount));
-                        rows.add(Map.of("value", "보철", "count", prosthesisCount));
-                        rows.add(Map.of("value", "임플란트", "count", implantCount));
-                        rows.add(Map.of("value", "브릿지", "count", bridgeCount));
-                        rows.add(Map.of("value", "기타", "count", otherCount));
-
-                        result.put("rows", rows);
-                        responseList.add(result);
-
-                    } else if ("P_RES_AREA".equals(header)) {
-                        // 지역별 필드 요약 처리
-                        Map<String, Object> result = new HashMap<>();
-                        result.put("headers", HeaderMapping.determineHeadersBasedOnFilters(Collections.singletonList(header))); // 헤더 동적 처리
-                        result.put("id", "P_RES_AREA");
-                        result.put("title", HeaderMapping.determineTitleBasedOnHeaders(Collections.singletonList(header))); // 타이틀 동적 처리
-
-                        Map<String, Integer> regionCounts = new HashMap<>();
-
-                        for (Future<List<Map<String, String>>> future : futures) {
-                            List<Map<String, String>> fileData = future.get();
-
-                            for (Map<String, String> rowData : fileData) {
-                                String region = rowData.getOrDefault("P_RES_AREA", "").trim();
-                                if (!region.isEmpty()) {  // null 또는 빈 값 처리
-                                    String mappedRegion = mapRegionName(region);  // 지역명 매핑
-                                    regionCounts.put(mappedRegion, regionCounts.getOrDefault(mappedRegion, 0) + 1);
-                                }
-                            }
-                        }
-
-                        // 지역별 카운트를 rows 리스트로 변환
-                        List<Map<String, Object>> rows = new ArrayList<>();
-                        for (Map.Entry<String, Integer> entry : regionCounts.entrySet()) {
-                            rows.add(Map.of("value", entry.getKey(), "count", entry.getValue()));
-                        }
-
-                        result.put("rows", rows);
-                        responseList.add(result);
-
-                    } else {
-                        // 일반적인 헤더 처리
-                        Map<String, Object> result = new HashMap<>();
-                        String title = HeaderMapping.determineTitleBasedOnHeaders(Collections.singletonList(header));
-                        List<String> dynamicHeaders = HeaderMapping.determineHeadersBasedOnFilters(Collections.singletonList(header));
-                        result.put("id", header);
-                        result.put("title", title);
-                        result.put("headers", dynamicHeaders);
-
-                        // 빈도수 계산
-                        Map<String, Integer> valueCounts = new HashMap<>();
-
-                        for (Future<List<Map<String, String>>> future : futures) {
-                            List<Map<String, String>> fileData = future.get();
-
-                            for (Map<String, String> rowData : fileData) {
-                                String value = rowData.getOrDefault(header, "").trim();
-                                if (!value.isEmpty()) {
-                                    String mappedValue = ValueMapping.headerMappingFunctions
-                                            .getOrDefault(header, Function.identity())
-                                            .apply(value);
-                                    valueCounts.put(mappedValue, valueCounts.getOrDefault(mappedValue, 0) + 1);
-                                }
-                            }
-                        }
-
-                        // 빈도수를 rows 리스트로 변환
-                        List<Map<String, Object>> rows = new ArrayList<>();
-                        for (Map.Entry<String, Integer> entry : valueCounts.entrySet()) {
-                            rows.add(Map.of("value", entry.getKey(), "count", entry.getValue()));
-                        }
-
-                        result.put("rows", rows);
-                        responseList.add(result);
                     }
+
+                    List<Map<String, Object>> rows = new ArrayList<>();
+                    rows.add(Map.of("value", "정상", "count", normalCount));
+                    rows.add(Map.of("value", "보철", "count", prosthesisCount));
+                    rows.add(Map.of("value", "임플란트", "count", implantCount));
+                    rows.add(Map.of("value", "브릿지", "count", bridgeCount));
+                    rows.add(Map.of("value", "기타", "count", otherCount));
+
+                    result.put("rows", rows);
+                    responseList.add(result);
+                } else if ("P_RES_AREA".equals(header)) {
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("headers", HeaderMapping.determineHeadersBasedOnFilters(Collections.singletonList(header)));
+                    result.put("id", "P_RES_AREA");
+                    result.put("title", HeaderMapping.determineTitleBasedOnHeaders(Collections.singletonList(header)));
+
+                    Map<String, Integer> regionCounts = new HashMap<>();
+
+                    for (Future<List<Map<String, String>>> future : futures) {
+                        List<Map<String, String>> fileData = future.get();
+
+                        for (Map<String, String> rowData : fileData) {
+                            String region = rowData.getOrDefault("P_RES_AREA", "").trim();
+                            if (!region.isEmpty()) {
+                                String mappedRegion = mapRegionName(region);
+                                regionCounts.put(mappedRegion, regionCounts.getOrDefault(mappedRegion, 0) + 1);
+                            }
+                        }
+                    }
+
+                    List<Map<String, Object>> rows = new ArrayList<>();
+                    for (Map.Entry<String, Integer> entry : regionCounts.entrySet()) {
+                        rows.add(Map.of("value", entry.getKey(), "count", entry.getValue()));
+                    }
+
+                    result.put("rows", rows);
+                    responseList.add(result);
+                } else {
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("id", header);
+                    result.put("title", HeaderMapping.determineTitleBasedOnHeaders(Collections.singletonList(header)));
+                    result.put("headers", HeaderMapping.determineHeadersBasedOnFilters(Collections.singletonList(header)));
+
+                    Map<String, Integer> valueCounts = new HashMap<>();
+
+                    for (Future<List<Map<String, String>>> future : futures) {
+                        List<Map<String, String>> fileData = future.get();
+
+                        for (Map<String, String> rowData : fileData) {
+                            String value = rowData.getOrDefault(header, "").trim();
+                            if (!value.isEmpty()) {
+                                String mappedValue = ValueMapping.headerMappingFunctions
+                                        .getOrDefault(header, Function.identity())
+                                        .apply(value);
+                                valueCounts.put(mappedValue, valueCounts.getOrDefault(mappedValue, 0) + 1);
+                            }
+                        }
+                    }
+
+                    List<Map<String, Object>> rows = new ArrayList<>();
+                    for (Map.Entry<String, Integer> entry : valueCounts.entrySet()) {
+                        rows.add(Map.of("value", entry.getKey(), "count", entry.getValue()));
+                    }
+
+                    result.put("rows", rows);
+                    responseList.add(result);
                 }
-        } catch (ExecutionException e) {
-            throw new RuntimeException(e);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            }
+        } catch (ExecutionException | InterruptedException e) {
+            throw new RuntimeException("파일 처리 중 오류가 발생했습니다.", e);
         } finally {
             executor.shutdown();
         }
@@ -571,12 +547,22 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
              Workbook workbook = new XSSFWorkbook(inputStream)) {
 
             int numberOfSheets = workbook.getNumberOfSheets();
+            String fileName = excelFile.getName();
 
             for (int i = 0; i < numberOfSheets; i++) {
                 Sheet sheet = workbook.getSheetAt(i);
 
-                if (!sheet.getSheetName().contains("CRF")) {
-                    continue; // "CRF"가 없는 Sheet는 건너뛰기
+                // 기존 시트 이름 필터링 로직 유지
+                if (fileName.contains("두개안면") && !(sheet.getSheetName().contains("CRF") && sheet.getSheetName().contains("두개안면기형"))) {
+                    continue;
+                } else if (fileName.contains("치주질환") && !(sheet.getSheetName().contains("CRF") && sheet.getSheetName().contains("치주질환"))) {
+                    continue;
+                } else if (fileName.contains("구강암") && !(sheet.getSheetName().contains("CRF") && sheet.getSheetName().contains("구강암"))) {
+                    continue;
+                } else if (fileName.contains("골수염") && !(sheet.getSheetName().contains("CRF") && sheet.getSheetName().contains("골수염"))) {
+                    continue;
+                } else if (!(sheet.getSheetName().contains("CRF"))) {
+                    continue; // "CRF"가 없는 시트 건너뜀
                 }
 
                 Row headerRow = sheet.getRow(3); // 4번째 행을 헤더로 가정
@@ -608,7 +594,7 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
                                 if (headerName.startsWith("Tooth_")) {
                                     Integer cellIndex = entry.getValue();
                                     Cell cell = row.getCell(cellIndex);
-                                    String cellValue = (cell != null) ? ExcelUtils.getCellValueAsString(cell).trim() : "";
+                                    String cellValue = (cell != null) ? getCellValueAsString(cell).trim() : "";
                                     rowData.put(headerName, cellValue);
                                 }
                             }
@@ -620,7 +606,7 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
                                 Integer cellIndex = headerIndexMap.get(header);
                                 if (cellIndex != null) {
                                     Cell cell = row.getCell(cellIndex);
-                                    String cellValue = (cell != null) ? ExcelUtils.getCellValueAsString(cell) : "";
+                                    String cellValue = (cell != null) ? getCellValueAsString(cell) : "";
                                     rowData.put(header, cellValue);
                                 }
                             }
@@ -635,6 +621,133 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         }
         return filteredData;
     }
+
+    private List<Map<String, String>> processFolderFileWithFilters(File excelFile, Map<String, String> filterConditions, List<String> headers, Set<String> passIdsSet, Set<String> processedIds) throws IOException {
+        List<Map<String, String>> filteredData = new ArrayList<>();
+
+        // 파일명에서 기관명 추출
+        String institutionName = extractInstitutionName(excelFile.getName());
+
+        try (InputStream inputStream = new FileInputStream(excelFile);
+             Workbook workbook = new XSSFWorkbook(inputStream)) {
+
+            int numberOfSheets = workbook.getNumberOfSheets();
+            String fileName = excelFile.getName();
+
+            for (int i = 0; i < numberOfSheets; i++) {
+                Sheet sheet = workbook.getSheetAt(i);
+
+                // 기존 시트 이름 필터링 로직 유지
+                if (fileName.contains("두개안면") && !(sheet.getSheetName().contains("CRF") && sheet.getSheetName().contains("두개안면기형"))) {
+                    continue;
+                } else if (fileName.contains("치주질환") && !(sheet.getSheetName().contains("CRF") && sheet.getSheetName().contains("치주질환"))) {
+                    continue;
+                } else if (fileName.contains("구강암") && !(sheet.getSheetName().contains("CRF") && sheet.getSheetName().contains("구강암"))) {
+                    continue;
+                } else if (fileName.contains("골수염") && !(sheet.getSheetName().contains("CRF") && sheet.getSheetName().contains("골수염"))) {
+                    continue;
+                } else if (!(sheet.getSheetName().contains("CRF"))) {
+                    continue; // "CRF"가 없는 시트 건너뜀
+                }
+
+
+                Row headerRow = sheet.getRow(3); // 4번째 행을 헤더로 가정
+                if (headerRow == null) {
+                    continue;
+                }
+
+                // 헤더 행의 인덱스 매핑
+                Map<String, Integer> headerIndexMap = new HashMap<>();
+                for (int cellIndex = 0; cellIndex < headerRow.getLastCellNum(); cellIndex++) {
+                    Cell cell = headerRow.getCell(cellIndex);
+                    if (cell != null) {
+                        String headerName = cell.getStringCellValue().trim();
+                        headerIndexMap.put(headerName, cellIndex);
+                    }
+                }
+                Integer imageIdIndex = headerIndexMap.get("IMAGE_ID");
+                if (imageIdIndex == null) {
+                    throw new IllegalArgumentException("IMAGE_ID 헤더가 누락되었습니다. 파일을 확인하세요: " + excelFile.getName());
+                }
+
+                // 모든 데이터를 필터링
+                for (int rowIndex = 8; rowIndex <= sheet.getLastRowNum(); rowIndex++) { // 9번째 행부터 데이터 읽기
+                    Row row = sheet.getRow(rowIndex);
+                    if (row == null) {
+                        continue;
+                    }
+
+                    // IMAGE_ID 필터링
+                    String imageId = getCellValueAsString(row.getCell(imageIdIndex)).trim();
+                    if (!passIdsSet.contains(imageId)) {
+                        continue; // IMAGE_ID가 passIdsSet에 없으면 건너뜀
+                    }
+
+                    // 중복된 IMAGE_ID 건너뛰기
+                    synchronized (processedIds) {
+                        if (!processedIds.add(imageId)) {
+                            continue; // 이미 처리된 IMAGE_ID는 건너뜀
+                        }
+                    }
+
+                    if (matchesConditions(row, headerIndexMap, filterConditions)) {
+                        Map<String, String> rowData = new LinkedHashMap<>();
+
+                        // Tooth 관련 필드 확인
+                        if (headers.contains("Tooth")) {
+                            for (Map.Entry<String, Integer> entry : headerIndexMap.entrySet()) {
+                                String headerName = entry.getKey();
+                                if (headerName.startsWith("Tooth_")) {
+                                    Integer cellIndex = entry.getValue();
+                                    Cell cell = row.getCell(cellIndex);
+                                    String cellValue = (cell != null) ? getCellValueAsString(cell).trim() : "";
+                                    rowData.put(headerName, cellValue);
+                                }
+                            }
+                        }
+
+                        // 일반 헤더 처리
+                        for (String header : headers) {
+                            if (!header.contains("Tooth")) {
+                                Integer cellIndex = headerIndexMap.get(header);
+                                if (cellIndex != null) {
+                                    Cell cell = row.getCell(cellIndex);
+                                    String cellValue = (cell != null) ? getCellValueAsString(cell).trim() : "";
+                                    rowData.put(header, cellValue);
+                                }
+                            }
+                        }
+
+                        // 기관명 추가
+                        if (headers.contains("INSTITUTION_ID")) {
+                            rowData.put("INSTITUTION_ID", institutionName);
+                        }
+
+                        if (!rowData.isEmpty()) {
+                            filteredData.add(rowData);
+                        }
+                    }
+                }
+            }
+        }
+
+        return filteredData;
+    }
+
+    /**
+     * 파일명에서 기관명을 추출하는 메서드.
+     * @param fileName 파일명
+     * @return 추출된 기관명
+     */
+    private String extractInstitutionName(String fileName) {
+        String[] parts = fileName.split("_");
+        if (parts.length > 1) {
+            return parts[1]; // 두 번째 요소를 기관명으로 간주
+        }
+        return "알 수 없는 기관"; // 기본 값
+    }
+
+
 
     private boolean matchesConditions(Row row, Map<String, Integer> headerIndexMap, Map<String, String> filterConditions) {
         for (Map.Entry<String, String> condition : filterConditions.entrySet()) {

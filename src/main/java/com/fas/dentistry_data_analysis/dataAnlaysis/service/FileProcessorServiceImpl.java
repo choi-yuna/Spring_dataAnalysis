@@ -40,8 +40,6 @@ public class FileProcessorServiceImpl implements FileProcessor{
         }
     }
 
-
-
     @Override
     public List<Map<String, Map<String, String>>> processServerExcelFile(File excelFile, String diseaseClass, int institutionId, Set<String> processedIds, Set<String> passIdsSet) throws IOException {
         List<Map<String, Map<String, String>>> dataList = new ArrayList<>();
@@ -73,7 +71,8 @@ public class FileProcessorServiceImpl implements FileProcessor{
 
                 String sheetName = sheet.getSheetName().trim();
                 Map<String, List<String>> headerConfig = ExcelSheetHeaderMapping.getHeadersForSheet(sheetName);
-                if (headerConfig != null) { // 매핑된 헤더가 있는 경우만 처리
+
+                if (headerConfig != null) {
                     List<String> requiredHeaders = headerConfig.get("required");
                     List<String> optionalHeaders = headerConfig.get("optional");
 
@@ -181,6 +180,7 @@ public class FileProcessorServiceImpl implements FileProcessor{
 
         return dataList; // 최종 데이터 반환
     }
+
 
 
 

@@ -1,5 +1,6 @@
 package com.fas.dentistry_data_analysis.dashboard.controller;
 
+import com.fas.dentistry_data_analysis.config.StorageConfig;
 import com.fas.dentistry_data_analysis.dashboard.Service.AnalyzeBoardServiceImpl;
 
 import lombok.extern.slf4j.Slf4j;
@@ -15,15 +16,12 @@ import java.util.*;
     @RestController
     @RequestMapping("/api")
     public class DashboardController {
-
-        // private final String folderPath = "/치의학데이터 과제 데이터 수집/내부 데이터/단국대/골수염";
-        private final String folderPath = "/내부 데이터";
-
-
+        private final StorageConfig storageConfig;
         private final AnalyzeBoardServiceImpl analyzeBoardService;
 
         @Autowired
-        public DashboardController(AnalyzeBoardServiceImpl analyzeBoardService) {
+        public DashboardController(StorageConfig storageConfig, AnalyzeBoardServiceImpl analyzeBoardService) {
+            this.storageConfig = storageConfig;
             this.analyzeBoardService = analyzeBoardService;
         }
 
@@ -34,7 +32,7 @@ import java.util.*;
                 return ResponseEntity.status(HttpStatus.CONFLICT).body("새로고침이 이미 실행 중 입니다.");
             }
             // processFilesInFolder 메서드에 refresh 파라미터 전달
-            Map<String, Object> stringObjectMap = analyzeBoardService.processFilesInFolder(folderPath, refresh);
+            Map<String, Object> stringObjectMap = analyzeBoardService.processFilesInFolder(storageConfig.getDecodedFolderPath(), refresh);
             return ResponseEntity.ok(Map.of("data", stringObjectMap));
         }
 

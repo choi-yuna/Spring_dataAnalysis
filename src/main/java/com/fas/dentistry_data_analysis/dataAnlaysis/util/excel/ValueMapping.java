@@ -54,13 +54,13 @@ public class ValueMapping {
 
     // 기관 ID 매핑
     private static final Map<String, String> institutionMap = new HashMap<>() {{
-        put("1", "원광대학교");
-        put("2", "고려대학교");
-        put("3", "서울대학교");
-        put("4", "국립암센터");
-        put("5", "단국대학교");
-        put("6", "조선대학교");
-        put("7", "보라매병원");
+        put("원광대학교", "원광대학교");
+        put("고려대학교", "고려대학교");
+        put("서울대학교", "서울대학교");
+        put("국립암센터", "국립암센터");
+        put("단국대학교", "단국대학교");
+        put("조선대학교", "조선대학교");
+        put("보라매병원", "보라매병원");
     }};
 
     // Tooth 상태 매핑
