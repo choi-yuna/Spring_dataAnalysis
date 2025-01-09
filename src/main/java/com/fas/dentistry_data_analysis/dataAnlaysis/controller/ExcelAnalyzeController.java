@@ -50,7 +50,12 @@ public class ExcelAnalyzeController {
                 return ResponseEntity.ok(Map.of("data", dataList));
             } else if (fileIds != null && fileIds.length == 1 && "json".equals(fileIds[0])) { // fileIds가 "json" 문자열 하나만 포함하는 경우 처리
                 List<Map<String, Map<String, String>>> dataList = analyzeDataService.analyzeJsonData("C:/app/disease_json", diseaseClass, institutionId);
-                return ResponseEntity.ok(Map.of("data", dataList));
+
+                List<Map<String, Map<String, String>>> metaData = List.of();
+                if(diseaseClass.equals("0") && institutionId == 0) {
+                    metaData = analyzeDataService.analyzeFolderData("C:/app/dentistry", "E", institutionId);
+                }
+                return ResponseEntity.ok(Map.of("data", dataList, "meta", metaData.size()));
             } else { // fileIds가 null이거나 비어 있는 경우 처리
                 List<Map<String, Map<String, String>>> dataList = analyzeDataService.analyzeFolderData("C:/app/dentistry", diseaseClass, institutionId);
                 return ResponseEntity.ok(Map.of("data", dataList));

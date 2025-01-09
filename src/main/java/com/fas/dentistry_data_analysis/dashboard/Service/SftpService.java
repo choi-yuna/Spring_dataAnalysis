@@ -1,6 +1,6 @@
 package com.fas.dentistry_data_analysis.dashboard.Service;
 
-import com.fas.dentistry_data_analysis.dataAnlaysis.service.FolderFileCacheManager;
+import com.fas.dentistry_data_analysis.dashboard.util.FolderFileCacheManager;
 import com.fas.dentistry_data_analysis.common.util.sftp.SFTPClient;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.SftpException;

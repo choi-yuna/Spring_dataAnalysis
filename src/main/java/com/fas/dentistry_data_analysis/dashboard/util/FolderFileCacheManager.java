@@ -1,4 +1,4 @@
-package com.fas.dentistry_data_analysis.dataAnlaysis.service;
+package com.fas.dentistry_data_analysis.dashboard.util;
 
 import com.jcraft.jsch.ChannelSftp;
 import org.springframework.stereotype.Service;
