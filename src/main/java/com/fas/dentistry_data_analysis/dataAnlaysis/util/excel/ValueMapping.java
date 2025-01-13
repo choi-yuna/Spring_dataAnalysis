@@ -23,6 +23,7 @@ public class ValueMapping {
         put("DIA_PERIO", ValueMapping::getPerioDiseaseDescription);
         put("DIS_LOC", ValueMapping::getLocationDescription);
         put("DIS_CLASS", ValueMapping::getOsteomyelitisTypeDescription);
+        put("DIS_CLASS ", ValueMapping::getOsteomyelitisTypeDescription);
         put("MR_STAGE", ValueMapping::getStageDescription);
         put("MR_HOWTOTAKE", ValueMapping::getMedicationMethodDescription);
         put("MR_HOWLONG", ValueMapping::getMedicationDurationDescription);
