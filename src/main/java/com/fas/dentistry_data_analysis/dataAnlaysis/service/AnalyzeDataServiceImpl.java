@@ -390,6 +390,7 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         executor.shutdown();
         return combinedData;
     }
+
     @Override
     public List<Map<String, Object>> analyzeFolderDataWithFilters(String folderPath, Map<String, String> filterConditions, List<String> headers) throws IOException {
         if (folderPath == null) {
@@ -663,21 +664,16 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         return filteredData;
     }
 
-
     private JsonNode findValueInSections(JsonNode recordNode, String key) {
+        // 입력 키를 공백 제거
         String sanitizedKey = key.replaceAll("\\s+", "");
 
-        // 최상위에서 값 검색
-        JsonNode valueNode = recordNode.get(sanitizedKey);
-        if (valueNode != null) {
-            if (valueNode.isArray()) {
-                for (JsonNode item : valueNode) {
-                    if (item.has(key)) {
-                        return item.get(key);
-                    }
-                }
-            } else {
-                return valueNode;
+        // JSON 최상위에서 값 검색
+        Iterator<String> rootFieldNames = recordNode.fieldNames();
+        while (rootFieldNames.hasNext()) {
+            String fieldName = rootFieldNames.next();
+            if (fieldName.replaceAll("\\s+", "").equals(sanitizedKey)) {
+                return recordNode.get(fieldName); // 매칭된 값 반환
             }
         }
 
@@ -687,23 +683,31 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
             Map.Entry<String, JsonNode> field = fields.next();
             JsonNode section = field.getValue();
 
-            if (section.isArray()) { // 섹션이 배열일 경우
+            if (section.isArray()) { // 섹션이 배열인 경우
                 for (JsonNode item : section) {
-                    JsonNode itemValue = item.get(sanitizedKey);
-                    if (itemValue != null) {
-                        return itemValue;
+                    Iterator<String> itemFieldNames = item.fieldNames();
+                    while (itemFieldNames.hasNext()) {
+                        String itemFieldName = itemFieldNames.next();
+                        if (itemFieldName.replaceAll("\\s+", "").equals(sanitizedKey)) {
+                            return item.get(itemFieldName); // 매칭된 값 반환
+                        }
                     }
                 }
-            } else if (section.isObject()) { // 섹션이 객체일 경우
-                JsonNode itemValue = section.get(sanitizedKey);
-                if (itemValue != null) {
-                    return itemValue;
+            } else if (section.isObject()) { // 섹션이 객체인 경우
+                Iterator<String> sectionFieldNames = section.fieldNames();
+                while (sectionFieldNames.hasNext()) {
+                    String sectionFieldName = sectionFieldNames.next();
+                    if (sectionFieldName.replaceAll("\\s+", "").equals(sanitizedKey)) {
+                        return section.get(sectionFieldName); // 매칭된 값 반환
+                    }
                 }
             }
         }
 
         return null; // 값을 찾을 수 없으면 null 반환
     }
+
+
 
     private static final Map<String, String> HeaderSynonyms = new HashMap<>() {{
         put("MAKER_INFO", "MAKER_INFO");
@@ -763,8 +767,8 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
 
                 // 헤더 처리
                 for (String header : headers) {
-                    // 헤더 매핑 처리
-                    String normalizedHeader = HeaderSynonyms.getOrDefault(header, header);
+                    // 헤더 매핑 처리 및 trim() 적용
+                    String normalizedHeader = HeaderSynonyms.getOrDefault(header.trim(), header.trim());
 
                     if ("Tooth".equals(normalizedHeader)) {
                         // "Annotation_Data" 섹션에서 숫자 키에 해당하는 값 추출
@@ -773,7 +777,7 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
                             for (JsonNode annotationItem : annotationDataNode) {
                                 Iterator<String> fieldNames = annotationItem.fieldNames();
                                 while (fieldNames.hasNext()) {
-                                    String fieldName = fieldNames.next();
+                                    String fieldName = fieldNames.next().trim(); // 키값 trim()
                                     // 숫자 키인지 확인
                                     if (fieldName.matches("\\d+")) {
                                         String value = annotationItem.get(fieldName).asText().trim();
@@ -787,12 +791,11 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
                     } else {
                         JsonNode valueNode = findValueInSections(recordNode, normalizedHeader);
                         String value = (valueNode != null) ? valueNode.asText().trim() : "none";
-
                         // 값이 null이거나 "none"일 경우 건너뜀
                         if (value == null || value.equalsIgnoreCase("none")) {
                             continue;
                         }
-                        rowData.put(header, value);
+                        rowData.put(header.trim(), value); // 헤더도 trim() 적용
                     }
                 }
 
@@ -990,7 +993,6 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
                     continue; // "CRF"가 없는 시트 건너뜀
                 }
 
-
                 Row headerRow = sheet.getRow(3); // 4번째 행을 헤더로 가정
                 if (headerRow == null) {
                     continue;
@@ -1019,10 +1021,13 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
 
                     // IMAGE_ID 필터링
                     String imageId = getCellValueAsString(row.getCell(imageIdIndex)).trim();
-                    if (!passIdsSet.contains(imageId)) {
-                        continue; // IMAGE_ID가 passIdsSet에 없으면 건너뜀
-                    }
 
+                    // 중복 IMAGE_ID 처리
+                    synchronized (processedIds) {
+                        if (!passIdsSet.contains(imageId) || !processedIds.add(imageId)) {
+                            continue; // passIdsSet에 없거나 이미 처리된 IMAGE_ID는 건너뜀
+                        }
+                    }
 
                     if (matchesConditions(row, headerIndexMap, filterConditions)) {
                         Map<String, String> rowData = new LinkedHashMap<>();
@@ -1067,6 +1072,7 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
 
         return filteredData;
     }
+
 
     /**
      * 파일명에서 기관명을 추출하는 메서드.

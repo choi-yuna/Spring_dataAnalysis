@@ -13,13 +13,13 @@ public class ExcelUtils {
         try {
             switch (cell.getCellType()) {
                 case STRING:
-                    return cell.getStringCellValue();
+                    return cell.getStringCellValue().trim(); // 공백 제거
                 case NUMERIC:
                     if (DateUtil.isCellDateFormatted(cell)) {
                         return cell.getDateCellValue().toString();
                     } else {
                         double numericValue = cell.getNumericCellValue();
-                        if (numericValue == (long) numericValue) {
+                        if (numericValue % 1 == 0) { // 정수인지 확인
                             return String.valueOf((long) numericValue);
                         } else {
                             return String.valueOf(numericValue);
@@ -31,9 +31,14 @@ public class ExcelUtils {
                     // 수식을 무시하고 캐시된 값 사용
                     switch (cell.getCachedFormulaResultType()) {
                         case STRING:
-                            return cell.getRichStringCellValue().getString();
+                            return cell.getRichStringCellValue().getString().trim(); // 공백 제거
                         case NUMERIC:
-                            return String.valueOf(cell.getNumericCellValue());
+                            double formulaValue = cell.getNumericCellValue();
+                            if (formulaValue % 1 == 0) { // 정수인지 확인
+                                return String.valueOf((long) formulaValue);
+                            } else {
+                                return String.valueOf(formulaValue);
+                            }
                         case BOOLEAN:
                             return String.valueOf(cell.getBooleanCellValue());
                         default:
@@ -49,4 +54,3 @@ public class ExcelUtils {
         }
     }
 }
-
