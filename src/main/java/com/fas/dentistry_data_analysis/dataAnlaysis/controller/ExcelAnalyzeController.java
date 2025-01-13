@@ -74,9 +74,11 @@ public class ExcelAnalyzeController {
         try {
             // fileIds 추출
             log.info("Analyzing data with filters: {}", filterRequest);
-           List<String> fileIdsList = (List<String>) filterRequest.get("fileIds");
+            List<String> fileIdsList = (List<String>) filterRequest.get("fileIds");
             log.info("Analyzing data : {}", fileIdsList);
-            String StoragePath = storageConfig.getStoragePath();
+
+            String storagePath = storageConfig.getStoragePath();
+
             // 필터 조건 추출 (INSTITUTION_ID, P_GENDER 등)
             Map<String, String> filters = new HashMap<>();
             filterRequest.forEach((key, value) -> {
@@ -87,24 +89,28 @@ public class ExcelAnalyzeController {
 
             // header 값 추출
             List<String> headers = (List<String>) filterRequest.get("header");
-            //log.info("Analyzing data with filters for file IDs: {}, filters: {}, headers: {}", Arrays.toString(fileIds), filters, headers);
-            if (fileIdsList != null ) { // null 체크 추가
+
+            // JSON 데이터 처리
+            if (fileIdsList != null && "json".equals(fileIdsList.get(0))) {
+                List<Map<String, Object>> filteredDataList = analyzeDataService.analyzeJsonDataWithFilters("C:/app/disease_json", filters, headers);
+                return ResponseEntity.ok(filteredDataList);
+            }
+            // 일반 데이터 처리
+            if (fileIdsList != null) { // fileIds가 있을 경우
                 String[] fileIds = fileIdsList.toArray(new String[0]);
                 List<Map<String, Object>> filteredDataList = analyzeDataService.analyzeDataWithFilters(fileIds, filters, headers);
                 return ResponseEntity.ok(filteredDataList);
-            }
-            else {
-                // 동적 필터링과 헤더 필터링을 수행하고 List<Map<String, Object>> 반환
+            } else { // fileIds가 없을 경우
                 List<Map<String, Object>> filteredDataList = analyzeDataService.analyzeFolderDataWithFilters("C:/app/dentistry", filters, headers);
-            return ResponseEntity.ok(filteredDataList);
+                return ResponseEntity.ok(filteredDataList);
             }
-            // 변환된 List를 클라이언트에 반환
 
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("IOException occurred during data analysis", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("데이터 분석 중 오류가 발생했습니다.");
         }
     }
+
 
     @PostMapping("/error-analyze")
     public ResponseEntity<?> ErrorAnalyzeData(@RequestBody AnalysisRequestDTO request) {

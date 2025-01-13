@@ -5,6 +5,8 @@ import com.fas.dentistry_data_analysis.dataAnlaysis.util.excel.ConditionMatcher;
 import com.fas.dentistry_data_analysis.dataAnlaysis.util.excel.ExcelUtils;
 import com.fas.dentistry_data_analysis.dataAnlaysis.util.excel.HeaderMapping;
 import com.fas.dentistry_data_analysis.dataAnlaysis.util.excel.ValueMapping;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
@@ -388,7 +390,6 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         executor.shutdown();
         return combinedData;
     }
-
     @Override
     public List<Map<String, Object>> analyzeFolderDataWithFilters(String folderPath, Map<String, String> filterConditions, List<String> headers) throws IOException {
         if (folderPath == null) {
@@ -401,12 +402,51 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
             throw new IllegalArgumentException("지정된 경로가 유효하지 않거나 폴더가 아닙니다: " + folderPath);
         }
 
+        // DISEASE_CLASS에 따라 폴더 필터링
+        String diseaseClass = filterConditions.get("DISEASE_CLASS");
+        String institutionID = filterConditions.get("INSTITUTION_ID");
+
+        String targetDiseaseName;
+        String targetInstitutionName;
+
+        // 질환명 확인
+        if (diseaseClass != null && !"All".equalsIgnoreCase(diseaseClass)) {
+            if (!DiseaseClassMap.containsKey(diseaseClass)) {
+                throw new IllegalArgumentException("유효하지 않은 DISEASE_CLASS: " + diseaseClass);
+            }
+            targetDiseaseName = DiseaseClassMap.get(diseaseClass);
+        } else {
+            targetDiseaseName = null;
+        }
+        // 기관명 확인
+        if (institutionID != null && !institutionID.isEmpty()) {
+            if (!InstitutionMap.containsKey(institutionID)) {
+                throw new IllegalArgumentException("유효하지 않은 INSTITUTION_ID: " + institutionID);
+            }
+            targetInstitutionName = InstitutionMap.get(institutionID);
+        } else {
+            targetInstitutionName = null;
+        }
+
+        // 전체 또는 특정 질환 및 기관에 해당하는 파일 필터링
+        File[] files = folder.listFiles(file -> {
+            if (file.isDirectory() || !file.getName().toLowerCase().endsWith(".xlsx")) {
+                return false;
+            }
+            boolean matchesDisease = (targetDiseaseName == null) || file.getName().contains(targetDiseaseName);
+            boolean matchesInstitution = (targetInstitutionName == null) || file.getName().contains(targetInstitutionName);
+            return matchesDisease && matchesInstitution;
+        });
+
+        if (files == null || files.length == 0) {
+            log.warn("조건에 맞는 파일이 없습니다. 질환: {}, 기관: {}", targetDiseaseName, targetInstitutionName);
+            return Collections.emptyList();
+        }
+
         // passIdsSet 로드
         Set<String> passIdsSet = new HashSet<>(jsonService.loadPassIdsFromJson("C:/app/id/pass_ids.json"));
         Set<String> processedIds = new HashSet<>();
 
-        // 폴더 내의 모든 파일을 병렬로 처리
-        File[] files = folder.listFiles();
         List<Map<String, Object>> responseList = new ArrayList<>();
 
         ExecutorService executor = Executors.newCachedThreadPool();
@@ -540,6 +580,7 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         return responseList;
     }
 
+
     private List<Map<String, String>> processFileWithFilters(File excelFile, Map<String, String> filterConditions, List<String> headers) throws IOException {
         List<Map<String, String>> filteredData = new ArrayList<>();
 
@@ -622,6 +663,305 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
         return filteredData;
     }
 
+
+    private JsonNode findValueInSections(JsonNode recordNode, String key) {
+        String sanitizedKey = key.replaceAll("\\s+", "");
+
+        // 최상위에서 값 검색
+        JsonNode valueNode = recordNode.get(sanitizedKey);
+        if (valueNode != null) {
+            if (valueNode.isArray()) {
+                for (JsonNode item : valueNode) {
+                    if (item.has(key)) {
+                        return item.get(key);
+                    }
+                }
+            } else {
+                return valueNode;
+            }
+        }
+
+        // JSON 섹션에서 값 검색
+        Iterator<Map.Entry<String, JsonNode>> fields = recordNode.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> field = fields.next();
+            JsonNode section = field.getValue();
+
+            if (section.isArray()) { // 섹션이 배열일 경우
+                for (JsonNode item : section) {
+                    JsonNode itemValue = item.get(sanitizedKey);
+                    if (itemValue != null) {
+                        return itemValue;
+                    }
+                }
+            } else if (section.isObject()) { // 섹션이 객체일 경우
+                JsonNode itemValue = section.get(sanitizedKey);
+                if (itemValue != null) {
+                    return itemValue;
+                }
+            }
+        }
+
+        return null; // 값을 찾을 수 없으면 null 반환
+    }
+
+    private static final Map<String, String> HeaderSynonyms = new HashMap<>() {{
+        put("MAKER_INFO", "MAKER_INFO");
+        put("MAKER_INFO", "MAKER_IF"); // MAKER_IF를 MAKER_INFO로 매핑
+    }};
+
+    private List<Map<String, String>> processJsonFileWithFilters(File jsonFile, Map<String, String> filterConditions, List<String> headers, Set<String> processedIds) throws IOException {
+        List<Map<String, String>> filteredData = new ArrayList<>();
+        // 파일명에서 기관명 추출
+        String institutionName = extractInstitutionName(jsonFile.getName());
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        try (InputStream inputStream = new FileInputStream(jsonFile)) {
+            // JSON 파일 파싱
+            JsonNode rootNode = objectMapper.readTree(inputStream);
+
+            // JSON이 배열인지 확인
+            if (!rootNode.isArray()) {
+                throw new IllegalArgumentException("JSON 파일이 배열 형식이어야 합니다: " + jsonFile.getName());
+            }
+
+            for (JsonNode recordNode : rootNode) {
+                // IMAGE_ID 또는 Identifier의 IMAGE_ID 값을 추출
+                String imageId = null;
+
+                // IMAGE_ID 직접 추출
+                JsonNode imageIdNode = findValueInSections(recordNode, "IMAGE_ID");
+                if (imageIdNode != null && !imageIdNode.asText().trim().isEmpty()) {
+                    imageId = imageIdNode.asText().trim();
+                }
+
+                // Identifier 추출
+                if (imageId == null) {
+                    JsonNode identifierNode = recordNode.get("Identifier");
+                    if (identifierNode != null) {
+                        if (identifierNode.isArray()) { // 배열인 경우
+                            for (JsonNode item : identifierNode) {
+                                JsonNode identifierImageIdNode = item.get("IMAGE_ID");
+                                if (identifierImageIdNode != null && !identifierImageIdNode.asText().trim().isEmpty()) {
+                                    imageId = identifierImageIdNode.asText().trim();
+                                    break;
+                                }
+                            }
+                        } else if (identifierNode.isTextual()) { // 단일 문자열인 경우
+                            imageId = identifierNode.asText().trim();
+                        }
+                    }
+                }
+
+                if (imageId == null || imageId.isEmpty()) {
+                    continue;
+                }
+
+                // 데이터 추가
+                Map<String, String> rowData = new LinkedHashMap<>();
+                rowData.put("IMAGE_ID", imageId);
+
+                // 헤더 처리
+                for (String header : headers) {
+                    // 헤더 매핑 처리
+                    String normalizedHeader = HeaderSynonyms.getOrDefault(header, header);
+
+                    if ("Tooth".equals(normalizedHeader)) {
+                        // "Annotation_Data" 섹션에서 숫자 키에 해당하는 값 추출
+                        JsonNode annotationDataNode = recordNode.get("Annotation_Data");
+                        if (annotationDataNode != null && annotationDataNode.isArray()) {
+                            for (JsonNode annotationItem : annotationDataNode) {
+                                Iterator<String> fieldNames = annotationItem.fieldNames();
+                                while (fieldNames.hasNext()) {
+                                    String fieldName = fieldNames.next();
+                                    // 숫자 키인지 확인
+                                    if (fieldName.matches("\\d+")) {
+                                        String value = annotationItem.get(fieldName).asText().trim();
+                                        rowData.put("Tooth_" + fieldName, value);
+                                    }
+                                }
+                            }
+                        }
+                    } else if ("INSTITUTION_ID".equals(normalizedHeader)) {
+                        rowData.put("INSTITUTION_ID", institutionName);
+                    } else {
+                        JsonNode valueNode = findValueInSections(recordNode, normalizedHeader);
+                        String value = (valueNode != null) ? valueNode.asText().trim() : "none";
+
+                        // 값이 null이거나 "none"일 경우 건너뜀
+                        if (value == null || value.equalsIgnoreCase("none")) {
+                            continue;
+                        }
+                        rowData.put(header, value);
+                    }
+                }
+
+                // 결과 추가
+                if (!rowData.isEmpty()) {
+                    filteredData.add(rowData);
+                }
+            }
+        }
+        return filteredData;
+    }
+
+    @Override
+    public List<Map<String, Object>> analyzeJsonDataWithFilters(String folderPath, Map<String, String> filterConditions, List<String> headers) {
+        if (folderPath == null) {
+            throw new IllegalArgumentException("파일 ID 목록이 비어있거나 null입니다.");
+        }
+
+        // 폴더가 유효한지 확인
+        File folder = new File(folderPath);
+        if (!folder.exists() || !folder.isDirectory()) {
+            throw new IllegalArgumentException("지정된 경로가 유효하지 않거나 폴더가 아닙니다: " + folderPath);
+        }
+
+        // DISEASE_CLASS에 따라 폴더 필터링
+        String diseaseClass = filterConditions.get("DISEASE_CLASS");
+        String institutionID = filterConditions.get("INSTITUTION_ID");
+
+        String targetDiseaseName;
+        String targetInstitutionName;
+
+        // 질환명 확인
+        if (diseaseClass != null && !"All".equalsIgnoreCase(diseaseClass)) {
+            if (!DiseaseClassMap.containsKey(diseaseClass)) {
+                throw new IllegalArgumentException("유효하지 않은 DISEASE_CLASS: " + diseaseClass);
+            }
+            targetDiseaseName = DiseaseClassMap.get(diseaseClass);
+        } else {
+            targetDiseaseName = null;
+        }
+        // 기관명 확인
+        if (institutionID != null && !institutionID.isEmpty()) {
+            if (!InstitutionMap.containsKey(institutionID)) {
+                throw new IllegalArgumentException("유효하지 않은 INSTITUTION_ID: " + institutionID);
+            }
+            targetInstitutionName = InstitutionMap.get(institutionID);
+        } else {
+            targetInstitutionName = null;
+        }
+
+        // 전체 또는 특정 질환 및 기관에 해당하는 파일 필터링
+        File[] files = folder.listFiles(file -> {
+            if (file.isDirectory() || !file.getName().toLowerCase().endsWith(".json")) {
+                return false;
+            }
+            boolean matchesDisease = (targetDiseaseName == null) || file.getName().contains(targetDiseaseName);
+            boolean matchesInstitution = (targetInstitutionName == null) || file.getName().contains(targetInstitutionName);
+            return matchesDisease && matchesInstitution;
+        });
+
+        if (files == null || files.length == 0) {
+            log.warn("조건에 맞는 파일이 없습니다. 질환: {}, 기관: {}", targetDiseaseName, targetInstitutionName);
+            return Collections.emptyList();
+        }
+
+        Set<String> processedIds = new HashSet<>();
+        List<Map<String, Object>> responseList = new ArrayList<>();
+        ExecutorService executor = Executors.newCachedThreadPool();
+
+        try {
+            // 비동기 파일 처리
+            List<Future<List<Map<String, String>>>> futures = new ArrayList<>();
+            for (File file : files) {
+                futures.add(executor.submit(() -> {
+                    Map<String, String> fileFilterConditions = new HashMap<>(filterConditions);
+                    if ("All".equalsIgnoreCase(fileFilterConditions.get("DISEASE_CLASS"))) {
+                        fileFilterConditions.remove("DISEASE_CLASS");
+                    }
+                    return processJsonFileWithFilters(file, fileFilterConditions, headers, processedIds);
+                }));
+            }
+
+            // 기존 헤더 기반 로직 처리
+            for (String header : headers) {
+                if ("Tooth".equals(header)) {
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("headers", Arrays.asList("치아 상태", "개수"));
+                    result.put("id", "Tooth");
+                    result.put("title", "치아 상태 요약");
+
+                    // 치아 상태 빈도수 계산
+                    int implantCount = 0;
+                    int prosthesisCount = 0;
+                    int normalCount = 0;
+                    int bridgeCount = 0;
+                    int otherCount = 0;
+
+                    for (Future<List<Map<String, String>>> future : futures) {
+                        List<Map<String, String>> fileData = future.get();
+
+                        for (Map<String, String> rowData : fileData) {
+                            for (Map.Entry<String, String> entry : rowData.entrySet()) {
+                                String key = entry.getKey();
+                                String value = entry.getValue().trim();
+
+                                if (key.startsWith("Tooth_")) {
+                                    switch (value) {
+                                        case "1": normalCount++; break;
+                                        case "2": prosthesisCount++; break;
+                                        case "3": implantCount++; break;
+                                        case "4": bridgeCount++; break;
+                                        case "5": case "6": otherCount++; break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    List<Map<String, Object>> rows = new ArrayList<>();
+                    rows.add(Map.of("value", "정상", "count", normalCount));
+                    rows.add(Map.of("value", "보철", "count", prosthesisCount));
+                    rows.add(Map.of("value", "임플란트", "count", implantCount));
+                    rows.add(Map.of("value", "브릿지", "count", bridgeCount));
+                    rows.add(Map.of("value", "기타", "count", otherCount));
+
+                    result.put("rows", rows);
+                    responseList.add(result);
+                } else {
+                    // 기존 로직 처리
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("id", header);
+                    result.put("title", HeaderMapping.determineTitleBasedOnHeaders(Collections.singletonList(header)));
+                    result.put("headers", HeaderMapping.determineHeadersBasedOnFilters(Collections.singletonList(header)));
+
+                    Map<String, Integer> valueCounts = new HashMap<>();
+
+                    for (Future<List<Map<String, String>>> future : futures) {
+                        List<Map<String, String>> fileData = future.get();
+
+                        for (Map<String, String> rowData : fileData) {
+                            String value = rowData.getOrDefault(header, "").trim();
+                            if (!value.isEmpty()) {
+                                String mappedValue = ValueMapping.headerMappingFunctions
+                                        .getOrDefault(header, Function.identity())
+                                        .apply(value);
+                                valueCounts.put(mappedValue, valueCounts.getOrDefault(mappedValue, 0) + 1);
+                            }
+                        }
+                    }
+
+                    List<Map<String, Object>> rows = new ArrayList<>();
+                    for (Map.Entry<String, Integer> entry : valueCounts.entrySet()) {
+                        rows.add(Map.of("value", entry.getKey(), "count", entry.getValue()));
+                    }
+
+                    result.put("rows", rows);
+                    responseList.add(result);
+                }
+            }
+        } catch (ExecutionException | InterruptedException e) {
+            throw new RuntimeException("파일 처리 중 오류가 발생했습니다.", e);
+        } finally {
+            executor.shutdown();
+        }
+
+        return responseList;
+    }
+
+
     private List<Map<String, String>> processFolderFileWithFilters(File excelFile, Map<String, String> filterConditions, List<String> headers, Set<String> passIdsSet, Set<String> processedIds) throws IOException {
         List<Map<String, String>> filteredData = new ArrayList<>();
 
@@ -683,12 +1023,6 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
                         continue; // IMAGE_ID가 passIdsSet에 없으면 건너뜀
                     }
 
-                    // 중복된 IMAGE_ID 건너뛰기
-                    synchronized (processedIds) {
-                        if (!processedIds.add(imageId)) {
-                            continue; // 이미 처리된 IMAGE_ID는 건너뜀
-                        }
-                    }
 
                     if (matchesConditions(row, headerIndexMap, filterConditions)) {
                         Map<String, String> rowData = new LinkedHashMap<>();
@@ -740,14 +1074,16 @@ public class AnalyzeDataServiceImpl  implements AnalyzeDataService{
      * @return 추출된 기관명
      */
     private String extractInstitutionName(String fileName) {
-        String[] parts = fileName.split("_");
+        // 확장자 제거
+        String cleanFileName = fileName.replace(".json", "");
+
+        // 파일명 분리 및 기관명 추출
+        String[] parts = cleanFileName.split("_");
         if (parts.length > 1) {
             return parts[1]; // 두 번째 요소를 기관명으로 간주
         }
         return "알 수 없는 기관"; // 기본 값
     }
-
-
 
     private boolean matchesConditions(Row row, Map<String, Integer> headerIndexMap, Map<String, String> filterConditions) {
         for (Map.Entry<String, String> condition : filterConditions.entrySet()) {
