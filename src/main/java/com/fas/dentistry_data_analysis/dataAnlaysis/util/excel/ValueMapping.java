@@ -49,7 +49,6 @@ public class ValueMapping {
         put("C", "구강암");
         put("D", "두개안면");
         put("E", "대조군 1");
-        put("F", "대조군 2");
     }};
 
     // 기관 ID 매핑
@@ -225,6 +224,10 @@ public class ValueMapping {
 
 
     private static String getAgeRange(String value) {
+        if (!isNumeric(value)) {
+            return ""; // 숫자가 아닌 경우 제외
+        }
+
         int age = Integer.parseInt(value);
         if (age < 10) {
             return "0-9";
@@ -249,9 +252,14 @@ public class ValueMapping {
         }
     }
 
+
     // 체중 필터링 구간 설정
     private static String getWeightRange(String value) {
-        int weight = (int) Long.parseLong(value);
+        if (!isNumeric(value)) {
+            return ""; // 숫자가 아닌 경우 제외
+        }
+
+        long weight = Long.parseLong(value);
         if (weight < 40) {
             return "40 미만";
         } else if (weight >= 40 && weight <= 50) {
@@ -269,9 +277,14 @@ public class ValueMapping {
         }
     }
 
+
     // 키 필터링 구간 설정
     private static String getHeightRange(String value) {
-        int height = Integer.parseInt(value);
+        if (!isNumeric(value)) {
+            return ""; // 숫자가 아닌 경우 제외
+        }
+
+        int height = Integer.parseInt(value.trim());
         if (height < 140) {
             return "140 미만";
         } else if (height >= 140 && height <= 150) {
@@ -289,16 +302,25 @@ public class ValueMapping {
         }
     }
 
+
     private static String getYearRange(String value) {
-        int year;
-        try {
-            year = Integer.parseInt(value);
-        } catch (NumberFormatException e) {
-            return "Unknown Year"; // 기본값 또는 예외 처리
+        if (!isNumeric(value)) {
+            return ""; // 숫자가 아닌 경우 제외
         }
 
+        int year = Integer.parseInt(value.trim());
         if (year >= 1201 && year <= 1212) {
             return "12년";
+        }  else if (year >= 1101 && year <= 1112) {
+            return "11년";
+        }   else if (year >= 1001 && year <= 1012) {
+            return "10년";
+        }   else if (year >= 901 && year <= 912) {
+            return "09년";
+        } else if (year >= 801 && year <= 812) {
+            return "08년";
+        }  else if (year <= 712) {
+            return "07년 이하";
         } else if (year >= 1301 && year <= 1312) {
             return "13년";
         } else if (year >= 1401 && year <= 1412) {
@@ -321,8 +343,10 @@ public class ValueMapping {
             return "22년";
         } else if (year >= 2301 && year <= 2312) {
             return "23년";
+        } else if (year >= 2401 && year <= 2412) {
+            return "24년";
         } else {
-            return "Unknown Year";
+            return "";
         }
     }
 
@@ -332,90 +356,90 @@ public class ValueMapping {
 
     // 특정 매핑을 가져오는 메소드
     public static String getInstitutionDescription(String value) {
-        return institutionMap.getOrDefault(value, "Unknown Institution");
+        return institutionMap.getOrDefault(value, "");
     }
 
     public static String getDiseaseClass(String value) {
-        return DiseaseClassMap.getOrDefault(value, "Unknown");
+        return DiseaseClassMap.getOrDefault(value, "");
     }
 
     public static String getGenderDescription(String value) {
-        return genderMap.getOrDefault(value, "Unknown Gender");
+        return genderMap.getOrDefault(value, "");
     }
 
     public static String getSmokingDescription(String value) {
-        return smokingMap.getOrDefault(value, "Unknown Smoking Status");
+        return smokingMap.getOrDefault(value, "");
     }
 
     public static String getAlcoholDescription(String value) {
-        return alcoholMap.getOrDefault(value, "Unknown Alcohol Status");
+        return alcoholMap.getOrDefault(value, "");
     }
 
     public static String getDiabetesDescription(String value) {
-        return diabetesMap.getOrDefault(value, "Unknown Diabetes Status");
+        return diabetesMap.getOrDefault(value, "");
     }
 
     public static String getCardiovascularDiseaseDescription(String value) {
-        return cardiovascularDiseaseMap.getOrDefault(value, "Unknown Cardiovascular Disease Status");
+        return cardiovascularDiseaseMap.getOrDefault(value, "");
     }
 
     public static String getImageSourceDescription(String value) {
-        return imageSourceMap.getOrDefault(value, "Unknown Image Source");
+        return imageSourceMap.getOrDefault(value, "");
     }
 
     public static String getPerioDiseaseDescription(String value) {
-        return perioDiseaseMap.getOrDefault(value, "Unknown Periodontal Disease Status");
+        return perioDiseaseMap.getOrDefault(value, "");
     }
 
     public static String getLocationDescription(String value) {
-        return locationMap.getOrDefault(value, "Unknown Location");
+        return locationMap.getOrDefault(value, "");
     }
 
     public static String getOsteomyelitisTypeDescription(String value) {
-        return osteomyelitisTypeMap.getOrDefault(value, "Unknown Osteomyelitis Type");
+        return osteomyelitisTypeMap.getOrDefault(value, "");
     }
 
     public static String getStageDescription(String value) {
-        return stageMap.getOrDefault(value, "Unknown Stage");
+        return stageMap.getOrDefault(value, "");
     }
 
     public static String getMedicationMethodDescription(String value) {
-        return medicationMethodMap.getOrDefault(value, "Unknown Medication Method");
+        return medicationMethodMap.getOrDefault(value, "");
     }
 
     public static String getMedicationDurationDescription(String value) {
-        return medicationDurationMap.getOrDefault(value, "Unknown Medication Duration");
+        return medicationDurationMap.getOrDefault(value, "");
     }
 
 
     public static String getFirstTreatDescription(String value) {
-        return firstTreatMap.getOrDefault(value, "Unknown First Treatment");
+        return firstTreatMap.getOrDefault(value, "");
     }
     public static String getCommonOXDescription(String value) {
-        return commonOXMap.getOrDefault(value, "Unknown Status");
+        return commonOXMap.getOrDefault(value, "");
     }
     public static String getCraniofacialDescription(String value) {
-        return craniofacialMap.getOrDefault(value, "Unknown Craniofacial Condition");
+        return craniofacialMap.getOrDefault(value, "");
     }
 
     public static String getDataTimeDescription(String value) {
-        return dataTimeMap.getOrDefault(value, "Unknown Data Time");
+        return dataTimeMap.getOrDefault(value, "");
     }
     // 진단명(DI_NAME) 매핑 메소드
     public static String getDiagnosisNameDescription(String value) {
-        return diagnosisNameMap.getOrDefault(value, "Unknown Diagnosis Name");
+        return diagnosisNameMap.getOrDefault(value, "");
     }
 
     // 병소부위(DI_LOC) 매핑 메소드
     public static String getLesionLocationDescription(String value) {
-        return lesionLocationMap.getOrDefault(value, "Unknown Lesion Location");
+        return lesionLocationMap.getOrDefault(value, "");
     }
 
     public static String getDiagnosisDetailDescription(String value) {
         String[] selections = value.split(",");
         StringBuilder details = new StringBuilder();
         for (String selection : selections) {
-            String description = diagnosisDetailMap.getOrDefault(selection.trim(), "Unknown Diagnosis Detail");
+            String description = diagnosisDetailMap.getOrDefault(selection.trim(), "");
             if (!details.isEmpty()) {
                 details.append(". ");
             }
@@ -424,5 +448,17 @@ public class ValueMapping {
         return details.toString();
     }
 
+
+    private static boolean isNumeric(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return false; // null 또는 빈 문자열은 숫자가 아님
+        }
+        try {
+            Long.parseLong(value.trim());
+            return true; // 숫자로 변환 가능하면 true
+        } catch (NumberFormatException e) {
+            return false; // 변환 불가능하면 false
+        }
+    }
 
 }

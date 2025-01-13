@@ -12,4 +12,6 @@ public interface AnalyzeDataService {
 
     List<Map<String, Object>> analyzeDataWithFilters(String[] fileIds, Map<String, String> filterConditions, List<String> headers) throws IOException;
     List<Map<String, Object>> analyzeFolderDataWithFilters(String folderPath, Map<String, String> filterConditions, List<String> headers) throws IOException;
+
+    List<Map<String, Object>> analyzeJsonDataWithFilters(String s, Map<String, String> filters, List<String> headers);
 }
