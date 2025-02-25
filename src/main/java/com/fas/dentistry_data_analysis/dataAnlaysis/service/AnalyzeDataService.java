@@ -6,12 +6,8 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 public interface AnalyzeDataService {
-    List<Map<String, Map<String, String>>> analyzeData(String[] fileIds, String diseaseClass, int institutionId) throws IOException, InterruptedException, ExecutionException;
-    List<Map<String, Map<String, String>>>  analyzeFolderData(String folderPath, String diseaseClass, int institutionId) throws IOException, InterruptedException, ExecutionException;
-   List<Map<String, Map<String, String>>> analyzeJsonData(String folderPath, String diseaseClass, int institutionId) throws IOException, ExecutionException, InterruptedException;
+    List<Map<String, Map<String, String>>> analyzeData(List<String> filePath, String diseaseClass, int institutionId) throws IOException, InterruptedException, ExecutionException;
 
-    List<Map<String, Object>> analyzeDataWithFilters(String[] fileIds, Map<String, String> filterConditions, List<String> headers) throws IOException;
-    List<Map<String, Object>> analyzeFolderDataWithFilters(String folderPath, Map<String, String> filterConditions, List<String> headers) throws IOException;
-
-    List<Map<String, Object>> analyzeJsonDataWithFilters(String s, Map<String, String> filters, List<String> headers);
+    List<Map<String, Object>> analyzeDataWithFilters(List<String> filePath, Map<String, String> filterConditions, List<String> headers) throws IOException;
 }
+
