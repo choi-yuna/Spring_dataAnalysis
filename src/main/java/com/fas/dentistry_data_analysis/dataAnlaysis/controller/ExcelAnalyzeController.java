@@ -7,6 +7,7 @@ import com.fas.dentistry_data_analysis.dataAnlaysis.service.AnalyzeDataService;
 import com.fas.dentistry_data_analysis.dataAnlaysis.service.duplication.DuplicationService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,13 +21,20 @@ import java.util.concurrent.ExecutionException;
 @RequestMapping("/api")
 public class ExcelAnalyzeController {
 
-        private final AnalyzeDataService analyzeDataService;
-        private final StorageConfig  storageConfig;
-        private final DuplicationService duplicationService;
+    private final AnalyzeDataService jsonService;
+    private final AnalyzeDataService excelService;
+    private final AnalyzeDataService folderService;
+    private final StorageConfig  storageConfig;
+    private final DuplicationService duplicationService;
 
     @Autowired
-    public ExcelAnalyzeController(AnalyzeDataService analyzeDataService, AnalyzeBoardServiceImpl analyzeBoardService, StorageConfig storageConfig,DuplicationService duplicationService ) {
-        this.analyzeDataService = analyzeDataService;
+    public ExcelAnalyzeController(@Qualifier("analyzeDataServiceImpl") AnalyzeDataService excelService,
+                                  @Qualifier("analyzeFolderDataServiceImpl") AnalyzeDataService folderService,
+                                  @Qualifier("analyzeJsonDataServiceImpl") AnalyzeDataService jsonService,
+                                  StorageConfig storageConfig, DuplicationService duplicationService ) {
+        this.excelService = excelService;
+        this.folderService = folderService;
+        this.jsonService = jsonService;
         this.storageConfig = storageConfig;
         this.duplicationService = duplicationService;
     }
@@ -39,25 +47,25 @@ public class ExcelAnalyzeController {
     @PostMapping("/analyze")
     public ResponseEntity<?> analyzeData(@RequestBody AnalysisRequestDTO request) {
         try {
-            String[] fileIds = request.getFileIds();
-           String storagePath = storageConfig.getStoragePath();
+            List<String> fileIds = request.getFileIds() != null ? Arrays.asList(request.getFileIds()) : new ArrayList<>();
+            String storagePath = storageConfig.getStoragePath();
             String diseaseClass = request.getDiseaseClass();
             int institutionId = request.getInstitutionId();
             log.info("Analyzing data for file IDs: {}, diseaseClass: {}, institutionId: {}", fileIds, diseaseClass, institutionId);
 
-            if (fileIds != null && fileIds.length > 0 && !Arrays.asList(fileIds).contains("json")) { // null 및 "json" 포함 여부 체크
-                List<Map<String, Map<String, String>>> dataList = analyzeDataService.analyzeData(fileIds, diseaseClass, institutionId);
+            if (fileIds != null && fileIds.size() > 0 && !fileIds.contains("json")) { // null 및 "json" 포함 여부 체크
+                List<Map<String, Map<String, String>>> dataList = excelService.analyzeData(fileIds, diseaseClass, institutionId);
                 return ResponseEntity.ok(Map.of("data", dataList));
-            } else if (fileIds != null && fileIds.length == 1 && "json".equals(fileIds[0])) { // fileIds가 "json" 문자열 하나만 포함하는 경우 처리
-                List<Map<String, Map<String, String>>> dataList = analyzeDataService.analyzeJsonData("C:/app/disease_json", diseaseClass, institutionId);
+            } else if (fileIds != null && fileIds.size() == 1 && "json".equals(fileIds.get(0))) { // fileIds가 "json" 문자열 하나만 포함하는 경우 처리
+                List<Map<String, Map<String, String>>> dataList = jsonService.analyzeData(List.of("C:/app/disease_json"), diseaseClass, institutionId);
 
                 List<Map<String, Map<String, String>>> metaData = List.of();
                 if(diseaseClass.equals("0") && institutionId == 0) {
-                    metaData = analyzeDataService.analyzeFolderData("C:/app/dentistry", "E", institutionId);
+                    metaData = folderService.analyzeData(List.of("C:/app/dentistry"), "E", institutionId);
                 }
                 return ResponseEntity.ok(Map.of("data", dataList, "meta", metaData.size()));
             } else { // fileIds가 null이거나 비어 있는 경우 처리
-                List<Map<String, Map<String, String>>> dataList = analyzeDataService.analyzeFolderData("C:/app/dentistry", diseaseClass, institutionId);
+                List<Map<String, Map<String, String>>> dataList = folderService.analyzeData(List.of("C:/app/dentistry"), diseaseClass, institutionId);
                 return ResponseEntity.ok(Map.of("data", dataList));
             }
 
@@ -92,16 +100,16 @@ public class ExcelAnalyzeController {
 
             // JSON 데이터 처리
             if (fileIdsList != null && "json".equals(fileIdsList.get(0))) {
-                List<Map<String, Object>> filteredDataList = analyzeDataService.analyzeJsonDataWithFilters("C:/app/disease_json", filters, headers);
+                List<Map<String, Object>> filteredDataList = jsonService.analyzeDataWithFilters(List.of("C:/app/disease_json"), filters, headers);
                 return ResponseEntity.ok(filteredDataList);
             }
             // 일반 데이터 처리
             if (fileIdsList != null) { // fileIds가 있을 경우
-                String[] fileIds = fileIdsList.toArray(new String[0]);
-                List<Map<String, Object>> filteredDataList = analyzeDataService.analyzeDataWithFilters(fileIds, filters, headers);
+                List<String> fileIds = List.of(fileIdsList.toArray(new String[0]));
+                List<Map<String, Object>> filteredDataList = excelService.analyzeDataWithFilters(fileIds, filters, headers);
                 return ResponseEntity.ok(filteredDataList);
             } else { // fileIds가 없을 경우
-                List<Map<String, Object>> filteredDataList = analyzeDataService.analyzeFolderDataWithFilters("C:/app/dentistry", filters, headers);
+                List<Map<String, Object>> filteredDataList = folderService.analyzeDataWithFilters(List.of("C:/app/dentistry"), filters, headers);
                 return ResponseEntity.ok(filteredDataList);
             }
 

@@ -28,7 +28,6 @@ public class AnalyzeBoardServiceImpl {
 
     private final JSONService jsonService;
     private final SftpService  sftpService;
-    private final TotalDataGropedService totalDataGropedService;
     private final ExcelService excelService;
     private final FolderFileCacheManager folderFileCacheManager;
     private final StorageConfig storageConfig;
@@ -44,11 +43,10 @@ public class AnalyzeBoardServiceImpl {
     private final Map<String, Set<String>> institutionDiseaseJsonFiles = new HashMap<>();
 
 
-    public AnalyzeBoardServiceImpl(SftpService sftpService,JSONService jsonService, ExcelService excelService, TotalDataGropedService totalDataGropedService,
+    public AnalyzeBoardServiceImpl(SftpService sftpService,JSONService jsonService, ExcelService excelService,
                                    FolderFileCacheManager folderFileCacheManager, StorageConfig storageConfig, SftpConfig sftpConfig, DataManagementService dataManagementService) {
         this.jsonService = jsonService;
         this.excelService = excelService;
-        this.totalDataGropedService = totalDataGropedService;
         this.folderFileCacheManager = folderFileCacheManager;
         this.storageConfig = storageConfig;
         this.sftpConfig = sftpConfig;
@@ -99,7 +97,6 @@ public class AnalyzeBoardServiceImpl {
         } finally {
             if (refresh) {
                 jsonService.savePassIdsToJson(passIds,"C:/app/id");
-
                 // 중복 JSON 파일 정보를 저장
                 jsonService.saveDuplicateJsonInfoToLocal(duplicateJsonFiles, "C:/app/error_json");
 
@@ -151,6 +148,7 @@ public class AnalyzeBoardServiceImpl {
         if (folderPath.contains("보라매")) return "보라매병원";
         if (folderPath.contains("원광대")) return "원광대학교";
         if (folderPath.contains("조선대")) return "조선대학교";
+        if (folderPath.contains("국립암센터")) return "국립암센터";
         return null; // 매칭되지 않는 경우
     }
 
@@ -294,7 +292,7 @@ public class AnalyzeBoardServiceImpl {
         if (!stopSubfolderSearch.get()) {
             for (ChannelSftp.LsEntry entry : files) {
                 if (entry.getAttrs().isDir() && !entry.getFilename().equals(".") && !entry.getFilename().equals("..")) {
-                    if (folderPath.endsWith("/Labelling/Labelling") || folderPath.endsWith("\\Labelling\\Labelling")) {
+                    if (folderPath.endsWith("/Labelling/Labelling") || folderPath.endsWith("\\Labelling\\Labelling") || folderPath.contains("/비식별화 데이터" )) {
                         log.info("Skipping folder: {}", folderPath);
                         continue;
                     }

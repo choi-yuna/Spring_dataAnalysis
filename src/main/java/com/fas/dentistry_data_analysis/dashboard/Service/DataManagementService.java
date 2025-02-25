@@ -24,7 +24,7 @@ public class DataManagementService {
         Map<String, Integer> KRU = new HashMap<>();
         KRU.put("치주질환", 1400);
         KRU.put("두개안면", 400);
-        KRU.put("골수염", 1000);
+        KRU.put("골수염", 972);
         KRU.put("구강암", 50);
         institutionDiseaseGoals.put("고려대학교", KRU);
 
@@ -38,12 +38,12 @@ public class DataManagementService {
         institutionDiseaseGoals.put("국립암센터", nationalCancerCenter);
 
         Map<String, Integer> DKU = new HashMap<>();
-        DKU.put("골수염", 1408);
+        DKU.put("골수염", 1457);
         DKU.put("두개안면", 200);
         institutionDiseaseGoals.put("단국대학교", DKU);
 
         Map<String, Integer> CSU = new HashMap<>();
-        CSU.put("골수염", 1260);
+        CSU.put("골수염", 1207);
         CSU.put("두개안면", 400);
         institutionDiseaseGoals.put("조선대학교", CSU);
 
