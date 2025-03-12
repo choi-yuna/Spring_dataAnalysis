@@ -15,7 +15,17 @@ import java.util.concurrent.ExecutionException;
 @Service
 public class ExcelService {
 
-    // 엑셀 파일 처리
+    /**
+     * 엑셀 파일을 읽고 특정 질환 클래스(diseaseClass)에 해당하는 데이터를 필터링하여 반환
+     *
+     * @param inputStream  엑셀 파일의 입력 스트림
+     * @param diseaseClass 검색할 질환 클래스
+     * @return 필터링된 데이터 리스트 (List<Map<String, Object>>)
+     * @throws IOException       파일 읽기 오류 발생 시
+     * @throws ExecutionException 비동기 작업 실행 오류 발생 시
+     * @throws InterruptedException 비동기 작업이 인터럽트될 경우
+     */
+
     public List<Map<String, Object>> processExcelFile(InputStream inputStream, String diseaseClass) throws IOException, ExecutionException, InterruptedException {
         log.info("Processing Excel file");
 
@@ -45,6 +55,13 @@ public class ExcelService {
         return filteredData;
     }
 
+
+    /**
+     * 주어진 시트를 분석하여 필터링된 데이터를 리스트에 추가
+     *
+     * @param sheet        처리할 엑셀 시트
+     * @param filteredData 필터링된 데이터를 저장할 리스트
+     */
     private void processSheet(Sheet sheet, List<Map<String, Object>> filteredData) {
         FormulaEvaluator evaluator = sheet.getWorkbook().getCreationHelper().createFormulaEvaluator(); // 수식 평가기 생성
 
@@ -96,6 +113,12 @@ public class ExcelService {
         }
     }
 
+    /**
+     * 엑셀 셀의 값을 문자열로 변환하여 반환
+     *
+     * @param cell 변환할 엑셀 셀
+     * @return 문자열로 변환된 셀 값
+     */
     private String getCellValueAsString(Cell cell) {
         try {
             switch (cell.getCellType()) {

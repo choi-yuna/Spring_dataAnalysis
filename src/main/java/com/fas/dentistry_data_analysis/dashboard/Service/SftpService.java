@@ -21,6 +21,16 @@ public class SftpService {
         this.folderFileCacheManager = folderFileCacheManager;
     }
 
+    /**
+     * 특정 폴더 내에서 지정된 파일이 존재하는지 확인
+     *
+     * @param channelSftp SFTP 연결 채널
+     * @param folderPath  기본 폴더 경로
+     * @param fileName    확인할 파일명
+     * @param subFolder   추가적인 하위 폴더 경로
+     * @return 파일 존재 여부 (true: 존재함, false: 존재하지 않음)
+     * @throws SftpException SFTP 작업 중 오류 발생 시 예외 처리
+     */
 
     public boolean checkFileExistsInSFTP(ChannelSftp channelSftp, String folderPath, String fileName, String subFolder) throws SftpException {
         // 폴더와 서브폴더 경로 결합
@@ -48,6 +58,15 @@ public class SftpService {
         return cachedFiles.contains(fileName);
     }
 
+    /**
+     * 특정 폴더 내에서 주어진 imageId를 포함하는 폴더가 존재하는지 확인
+     *
+     * @param channelSftp SFTP 연결 채널
+     * @param folderPath  검색할 폴더 경로
+     * @param imageId     찾고자 하는 imageId
+     * @return imageId를 포함하는 폴더 존재 여부
+     * @throws SftpException SFTP 작업 중 오류 발생 시 예외 처리
+     */
     public boolean checkFileExistsInSFTPForImageId(ChannelSftp channelSftp, String folderPath, String imageId) throws SftpException {
         // 주어진 경로에 대한 캐시를 초기화하거나 가져옴
         Set<String> cachedFolders = folderFileCacheManager.computeIfAbsent(folderPath, path -> {
@@ -70,7 +89,15 @@ public class SftpService {
         return cachedFolders.stream().anyMatch(folderName -> folderName.contains(imageId));
     }
 
-
+    /**
+     * 특정 폴더 내에서 특정 키워드를 포함하는 폴더 개수 계산
+     *
+     * @param channelSftp SFTP 연결 채널
+     * @param folderPath  검색할 폴더 경로
+     * @param keyword     포함할 키워드
+     * @return 키워드를 포함하는 폴더 개수
+     * @throws SftpException SFTP 작업 중 오류 발생 시 예외 처리
+     */
     public int countFilteredFoldersInPath(ChannelSftp channelSftp, String folderPath, String keyword) throws SftpException {
         // 주어진 경로에 대한 캐시를 초기화하거나 가져옴
         folderFileCacheManager.clearCache();
@@ -97,6 +124,15 @@ public class SftpService {
                 .count();
     }
 
+
+    /**
+     * 특정 폴더에서 imageId를 포함하는 라벨링 파일이 존재하는지 확인
+     *
+     * @param channelSftp SFTP 연결 채널
+     * @param folderPath  검색할 폴더 경로
+     * @param imageId     찾고자 하는 imageId
+     * @return imageId를 포함하는 파일 존재 여부
+     */
     public boolean checkLabellingFileExistsInSFTPForImageId(ChannelSftp channelSftp, String folderPath, String imageId) {
         // 캐시에서 파일/폴더 세트를 가져오거나 초기화
         Set<String> filesInCache = folderFileCacheManager.computeIfAbsent(folderPath, path -> {

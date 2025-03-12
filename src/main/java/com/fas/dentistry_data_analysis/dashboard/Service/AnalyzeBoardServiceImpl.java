@@ -54,11 +54,23 @@ public class AnalyzeBoardServiceImpl {
         this.dataManagementService = dataManagementService;
     }
 
+    /**
+     * 현재 데이터 갱신(Refresh)이 진행 중인지 확인
+     *
+     * @return Refresh가 진행 중이면 true, 그렇지 않으면 false
+     */
     public boolean isRefreshInProgress() {
         return refreshStatus.get() == RefreshStatus.IN_PROGRESS;
     }
 
-
+    /**
+     * 특정 폴더 내의 파일을 분석하여 JSON으로 변환하고 결과를 반환
+     *
+     * @param folderPath 분석할 폴더 경로
+     * @param refresh    기존 데이터를 삭제하고 새로 분석할지 여부
+     * @return 분석 결과를 담은 Map 객체
+     * @throws Exception 분석 중 예외 발생 시
+     */
     public Map<String, Object> processFilesInFolder(String folderPath, boolean refresh) throws Exception {
         log.info("{}",folderPath);
         folderFileCacheManager.clearCache();
@@ -141,6 +153,12 @@ public class AnalyzeBoardServiceImpl {
         return response;
     }
 
+    /**
+     * 기관명을 추출하는 메서드
+     *
+     * @param folderPath 분석할 폴더 경로
+     * @return 기관명 (매칭되는 기관이 없으면 null 반환)
+     */
     private String extractInstitutionId(String folderPath) {
         if (folderPath.contains("고려대")) return "고려대학교";
         if (folderPath.contains("서울대")) return "서울대학교";
@@ -152,6 +170,12 @@ public class AnalyzeBoardServiceImpl {
         return null; // 매칭되지 않는 경우
     }
 
+    /**
+     * 질환명을 추출하는 메서드
+     *
+     * @param folderPath 분석할 폴더 경로
+     * @return 질환명 (매칭되는 질환이 없으면 null 반환)
+     */
     private String extractDiseaseClass(String folderPath) {
         if (folderPath.contains("치주질환")) return "치주질환";
         if (folderPath.contains("두개안면")) return "두개안면";
@@ -630,7 +654,14 @@ public class AnalyzeBoardServiceImpl {
     }
 
     /**
-     *JSON값 불러오기
+     * JSON 파일을 처리하여 로컬에 저장
+     *
+     * @param channelSftp  SFTP 채널
+     * @param folderPath   JSON 파일이 위치한 폴더 경로
+     * @param imageId      이미지 ID
+     * @param institutionId 기관명
+     * @param diseaseClass 질환명
+     * @param excelFileName 연결된 엑셀 파일명
      */
     private void processJsonFile(ChannelSftp channelSftp, String folderPath, String imageId, String institutionId,
                                  String diseaseClass, String excelFileName) throws Exception {
