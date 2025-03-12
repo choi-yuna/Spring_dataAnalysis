@@ -40,9 +40,10 @@ public class ExcelAnalyzeController {
     }
 
     /**
-     * 폴더 경로를 통한 CRF 분석
-     * @param
-     * @return
+     * CRF 데이터를 분석하는 API
+     *
+     * @param request 요청 객체 (fileIds, diseaseClass, institutionId 포함)
+     * @return 분석된 데이터 리스트를 포함하는 응답 객체
      */
     @PostMapping("/analyze")
     public ResponseEntity<?> analyzeData(@RequestBody AnalysisRequestDTO request) {
@@ -77,6 +78,13 @@ public class ExcelAnalyzeController {
             throw new RuntimeException(e);
         }
     }
+
+    /**
+     * 특정 필터를 적용하여 데이터 분석을 수행하는 API
+     *
+     * @param filterRequest 요청 필터 조건 (fileIds, header 등 포함)
+     * @return 필터링된 데이터 리스트 응답
+     */
     @PostMapping("/analyze-filters")
     public ResponseEntity<?> analyzeDataWithFilters(@RequestBody Map<String, Object> filterRequest) {
         try {
@@ -119,7 +127,12 @@ public class ExcelAnalyzeController {
         }
     }
 
-
+    /**
+     * 데이터 중복 여부를 확인하고 오류를 분석하는 API
+     *
+     * @param request 요청 객체 (fileIds, diseaseClass, institutionId 포함)
+     * @return 분석된 중복 데이터 결과
+     */
     @PostMapping("/error-analyze")
     public ResponseEntity<?> ErrorAnalyzeData(@RequestBody AnalysisRequestDTO request) {
         try {
