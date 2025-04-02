@@ -25,7 +25,6 @@ public class DataManagementService {
         KRU.put("치주질환", 1400);
         KRU.put("두개안면", 400);
         KRU.put("골수염", 972);
-        KRU.put("구강암", 50);
         institutionDiseaseGoals.put("고려대학교", KRU);
 
         Map<String, Integer> SNU = new HashMap<>();
