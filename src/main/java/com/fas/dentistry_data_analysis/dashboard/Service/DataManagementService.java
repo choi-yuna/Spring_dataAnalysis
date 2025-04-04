@@ -133,7 +133,7 @@ public class DataManagementService {
             }
         }
 
-        // 데이터가 있는 경우 결과를 그룹화
+        // 데이터가 있는 경우 결과를 그룹화 , resultList 데이터를 기반으로 그룹화해서 각 항목 누적
         for (Map<String, Object> item : resultList) {
             String diseaseClass = (String) item.get("DISEASE_CLASS");
             String institutionId = (String) item.get("INSTITUTION_ID");
@@ -212,10 +212,10 @@ public class DataManagementService {
                 int secondCheck = Integer.parseInt(subRow.get(8));
 
                 int firstCheckRate = (institutionGoalCount > 0) ? (int) ((firstCheck / (double) institutionGoalCount) * 100) : 0;
-                int secondCheckRate = (institutionGoalCount > 0) ? (int) ((secondCheck / (double) institutionGoalCount) * 100) : 0;
+                int finalRate  = (institutionGoalCount > 0) ? (int) ((secondCheck / (double) institutionGoalCount) * 100) : 0;
 
                 subRow.set(7, String.valueOf(firstCheckRate)); // 1차 구축율
-                subRow.set(9, String.valueOf(secondCheckRate)); // 2차 구축율
+                subRow.set(9, String.valueOf(finalRate )); // 2차 구축율
             }
 
             // controlData 구축율 계산
@@ -242,10 +242,10 @@ public class DataManagementService {
             int totalSecondCheck = totalData.get(7);
 
             int totalFirstCheckRate = (totalGoalCount > 0) ? (int) ((totalFirstCheck / (double) totalGoalCount) * 100) : 0;
-            int totalSecondCheckRate = (totalGoalCount > 0) ? (int) ((totalSecondCheck / (double) totalGoalCount) * 100) : 0;
+            int totalFinalRate  = (totalGoalCount > 0) ? (int) ((totalSecondCheck / (double) totalGoalCount) * 100) : 0;
 
             totalData.set(6, totalFirstCheckRate); // 1차 구축율
-            totalData.set(8, totalSecondCheckRate); // 2차 구축율
+            totalData.set(8, totalFinalRate ); // 2차 구축율
         }
 
         // 질환별로 기관을 정렬
