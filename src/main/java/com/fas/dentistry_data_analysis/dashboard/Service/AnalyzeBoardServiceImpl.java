@@ -262,10 +262,40 @@ public class AnalyzeBoardServiceImpl {
             } else {
                 log.info("JSON result file already exists for folder: {}", jsonFilePath);
                 List<Map<String, Object>> existingResults = jsonService.loadResultsFromJsonSftp(folderPath, channelSftp);
-                resultList.addAll(existingResults);
-                return; // 추가 처리 건너뜁니다.
-            }
 
+
+                // ★★ 수정: 분석 결과를 로드한 후 SFTP 상의 최신 파일 상태를 반영하여 모든 질환의 집계값(2차검수 포함)을 업데이트합니다.
+                try {
+                    // Labelling_2 폴더 존재 여부와 관계없이 모든 이미지에 대해 최신 상태를 재확인합니다.
+                    // Labelling_2 폴더가 존재하면 update를 진행하고, 없으면 update 없이 기존 값을 사용합니다.
+                    boolean labelling2Exists = false;
+                    try {
+                        SFTPClient.listFiles(channelSftp, folderPath + "/Labelling_2");
+                        labelling2Exists = true;
+                    } catch (SftpException e) {
+                        labelling2Exists = false;
+                    }
+                    if (labelling2Exists) {
+                        for (Map<String, Object> row : existingResults) {
+                            String imageId = (String) row.get("IMAGE_ID");
+                            if (imageId != null) {
+                                // 2차검수 파일 존재 여부를 재확인하여 업데이트 (모든 질환에 대해)
+                                boolean secondJsonExists = sftpService.checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling_2");
+                                // 필요에 따라 기존의 2차검수 값에 누적하거나, 새롭게 설정합니다.
+                                row.put("2차검수", secondJsonExists ? 1 : 0);
+
+                                // 만약 다른 집계값(임상, 영상, 메타 등)도 SFTP 상태를 반영하여 업데이트해야 한다면
+                                // 여기서 추가 검증 로직을 작성하면 됩니다.
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Error updating existing results for folder {}: {}", folderPath, e.getMessage());
+                }
+
+                resultList.addAll(existingResults);
+                return;
+            }
         }
         // 결과를 새로 분석하는 로직
         List<Map<String, Object>> folderResultList = new ArrayList<>();
@@ -590,6 +620,12 @@ public class AnalyzeBoardServiceImpl {
                 else {
                     dataManagementService.errorDataStatus(errorList, institutionId, diseaseClass, imageId,jsonExists,dcmExists,iniExists,alveExists);
                 }
+
+                // << 새 2차검수 로직: 치주질환의 경우 Labelling_2/meta 경로 사용 >>
+                boolean secondJsonExists = sftpService.checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling_2");
+                if (secondJsonExists) {
+                    dataManagementService.incrementStatus(resultList, institutionId, diseaseClass, null, "2차검수", null);
+                }
             }
             else if (folderPath.contains("두개안면")) {
                 jsonExists = sftpService.checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling");
@@ -616,6 +652,12 @@ public class AnalyzeBoardServiceImpl {
                 }
                 else {
                     dataManagementService.errorDataStatus(errorList, institutionId, diseaseClass, imageId,jsonExists,dcmExists,false,false);
+                }
+
+                // << 새 2차검수 로직: 두개안면의 경우 Labelling_2 경로 사용 >>
+                boolean secondJsonExists = sftpService.checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling_2");
+                if (secondJsonExists) {
+                    dataManagementService.incrementStatus(resultList, institutionId, diseaseClass, null, "2차검수", null);
                 }
             }
 
@@ -647,9 +689,17 @@ public class AnalyzeBoardServiceImpl {
                     dataManagementService.errorDataStatus(errorList, institutionId, diseaseClass, imageId,jsonExists,dcmExists,iniExists,labellingExists);
 
                 }
+
+                // << 새 2차검수 로직: 기타 질환은 Labelling_2 경로 사용 >>
+                boolean secondJsonExists = sftpService.checkFileExistsInSFTP(channelSftp, folderPath, imageId + ".json", "/Labelling_2");
+                if (secondJsonExists) {
+                    dataManagementService.incrementStatus(resultList, institutionId, diseaseClass, null, "2차검수", null);
+                }
             }
 
         }
+
+
 
     }
 
