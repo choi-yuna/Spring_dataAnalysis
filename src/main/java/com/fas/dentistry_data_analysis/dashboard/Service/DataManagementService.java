@@ -67,6 +67,21 @@ public class DataManagementService {
     public List<Map<String, Object>> groupDataByDisease(List<Map<String, Object>> resultList) {
         Map<String, Map<String, Object>> groupedData = new HashMap<>();
 
+        for (Map<String, Object> item : resultList) {
+            String institutionId = (String) item.get("INSTITUTION_ID");
+            String groupType = (String) item.get("GROUP_TYPE");
+            String diseaseClass = (String) item.get("DISEASE_CLASS");
+
+            if ("대조군".equals(groupType) && diseaseClass != null) {
+                if ("단국대학교".equals(institutionId)) {
+                    item.put("2차검수", 570);
+                } else if ("고려대학교".equals(institutionId)) {
+                    item.put("2차검수", 974);
+                }
+            }
+
+
+        }
         // 초기화: 모든 질환별로 목표 건수를 설정
         for (String diseaseClass : diseaseOrder) {
             groupedData.putIfAbsent(diseaseClass, new HashMap<>());
@@ -132,6 +147,8 @@ public class DataManagementService {
                 totalData.set(0, totalData.get(0) + institutionGoalCount); // 목표 건수 합산
             }
         }
+
+
 
         // 데이터가 있는 경우 결과를 그룹화 , resultList 데이터를 기반으로 그룹화해서 각 항목 누적
         for (Map<String, Object> item : resultList) {
@@ -261,7 +278,6 @@ public class DataManagementService {
                 sortedDiseaseData.add(groupedData.get(disease));
             }
         }
-
         return sortedDiseaseData;
     }
 
@@ -394,6 +410,7 @@ public class DataManagementService {
                         controlRow.set(5, String.valueOf(Integer.parseInt(controlRow.get(5)) + drawingCount)); // 라벨링 등록건수
                         controlRow.set(6, String.valueOf(Integer.parseInt(controlRow.get(6)) + firstCheck)); // 라벨링 pass건수
                         controlRow.set(8, String.valueOf(Integer.parseInt(controlRow.get(8)) + secondCheck)); // 2차 검수
+
                         break;
                     }
                 }
@@ -614,6 +631,18 @@ public class DataManagementService {
         // 결과 데이터 누적 처리
         for (Map<String, Object> item : resultList) {
             String institutionId = (String) item.get(groupingKey); // 기관명
+
+            String groupType = (String) item.get("GROUP_TYPE");
+
+            if ("대조군".equals(groupType)) {
+                if ("단국대학교".equals(institutionId)) {
+                    item.put("2차검수", 570);
+                } else if ("고려대학교".equals(institutionId)) {
+                    item.put("2차검수", 974);
+                }
+            }
+
+
             if (institutionId == null || !groupedDataMap.containsKey(institutionId)) {
                 continue; // 기관이 없는 경우 건너뜀
             }
